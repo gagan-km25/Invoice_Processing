@@ -1,13 +1,36 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="panel">
-  <h2>Foundation running</h2>
-  <p>This is the Sprint 0 scaffold. Features arrive per <em>docs/03-plan.md</em>:</p>
-  <ul>
-    <li>Sprint 1 — upload &amp; store invoices</li>
-    <li>Sprint 2 — automatic field extraction</li>
-    <li>Sprint 3 — review &amp; save to database</li>
-    <li>Sprint 4 — browse, search, edit, delete</li>
-  </ul>
+  <h2>Upload an invoice</h2>
+  <p class="hint">PDF only · up to {{ (config['MAX_CONTENT_LENGTH'] / (1024 * 1024))|int }} MB ·
+     up to {{ config['PAGE_LIMIT'] }} pages</p>
+  <form action="{{ url_for('uploads.upload') }}" method="post" enctype="multipart/form-data" class="upload-form">
+    <input type="file" name="file" accept=".pdf,application/pdf" required>
+    <button type="submit">Upload</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Recent uploads</h2>
+  {% if recent %}
+  <table class="invoice-table">
+    <thead>
+      <tr><th>#</th><th>File</th><th>Status</th><th>Pages</th><th>Uploaded</th></tr>
+    </thead>
+    <tbody>
+      {% for invoice in recent %}
+      <tr>
+        <td>{{ invoice['id'] }}</td>
+        <td>{{ invoice['original_filename'] }}</td>
+        <td><span class="status status-{{ invoice['status'] }}">{{ invoice['status'] }}</span></td>
+        <td>{{ invoice['page_count'] if invoice['page_count'] is not none else "—" }}</td>
+        <td>{{ invoice['created_at'] }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty-state">No invoices uploaded yet. Use the form above to add your first one.</p>
+  {% endif %}
 </section>
 {% endblock %}

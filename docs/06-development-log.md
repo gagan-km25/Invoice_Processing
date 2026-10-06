@@ -71,3 +71,37 @@ working tree clean. Results recorded in
 [04-test-results.md](04-test-results.md) (issues I-1–I-3 noted there). No
 later-sprint features were built. Ready for Sprint 1 (upload & store) on the
 user's go-ahead; awaiting sample invoices (M-2) by Sprint 2.
+
+**Sprint 1 — Upload & secure file storage (started).**
+Prompt P-05 logged first per user instruction. Scope: upload gates
+(presence → extension → size → magic bytes → open/encryption/page-count),
+UUID-based safe storage with single-pass SHA-256, repository functions,
+upload page with flash feedback and recent-uploads panel, non-blocking
+hash-duplicate warning (save-time vendor+number check belongs to Sprint 3
+per plan §4 step 14), Flask 413 handler for the size backstop, and the
+unit/integration test catalogue (TC-S1-*). Explicitly out of scope: any
+extraction or parsing — status remains `uploaded` after this sprint.
+
+**Sprint 1 — Upload & secure file storage (complete).**
+Tasks S1-T1…T7 delivered. **Implementation:** `services/uploading.py` runs the
+gate sequence (presence → extension → size → 5-byte `%PDF-` magic →
+openability/encryption → 50-page cap) and stores files as `<uuid-hex>.pdf` with
+a single-pass SHA-256; `db/repository.py` owns all SQL (parameterized only);
+`routes/uploads.py` serves the upload page + `POST /upload` with flash
+feedback and a recent-uploads panel; a 413 errorhandler translates Flask's
+`MAX_CONTENT_LENGTH` rejection into the same friendly message; home-page UI
+replaced the Sprint 0 placeholder. **Decisions:** upload-time duplicate check
+is hash-only and *non-blocking* (informational warning, FR-15) — the blocking
+confirm-with-override belongs to save time (Sprint 3, AC-4.2), per plan §4
+step 14; upload bodies ≤10 MB are read into memory for simplicity and
+single-pass hashing; rejected uploads store nothing (no file, no row); the
+client filename is never used for paths and never echoed in messages.
+**Verification:** full suite **30 passed / 0 failed / 0 skipped**; manual
+verification on a real server covered success, magic-byte rejection, duplicate
+warning, safe storage, and clean shutdown (TC-S1-M01…M05 in
+[04-test-results.md](04-test-results.md)); synthetic manual-test data removed
+afterward. **Issues:** orphaned Flask processes double-bound port 5000 and
+produced phantom 500s — killed by PID; session-cookie requirement for flash
+visibility over curl; a handful of test defects fixed before green (I-4…I-7).
+**Scope kept:** no extraction or parser code — that is Sprint 2. Commit:
+`sprint-1` (see git log for hash).

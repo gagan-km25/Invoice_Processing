@@ -4,7 +4,8 @@ Local-only web application for uploading invoices, extracting their details,
 reviewing them, and storing them in a local database. Architecture and sprint
 plan: docs/03-plan.md.
 """
-from flask import Flask, render_template
+from flask import Flask, flash, redirect, url_for
+from werkzeug.exceptions import RequestEntityTooLarge
 
 from app.config import Config
 from app.db import init_db
@@ -23,13 +24,16 @@ def create_app(config_object=Config) -> Flask:
     # SQLite schema (idempotent — safe on every boot).
     init_db(app)
 
-    # Blueprints are registered as their sprints deliver them (plan §7):
-    # Sprint 1 → routes/uploads.py, Sprint 3/4 → routes/invoices.py.
+    from app.routes import uploads
 
-    @app.route("/")
-    def index():
-        # Sprint 0 placeholder — Sprint 1 replaces this with the upload page
-        # served by the uploads blueprint.
-        return render_template("index.html")
+    app.register_blueprint(uploads.bp)
+
+    @app.errorhandler(RequestEntityTooLarge)
+    def too_large(_error):
+        # Flask rejects bodies over MAX_CONTENT_LENGTH before our route runs;
+        # translate the raw 413 into the same friendly flash as other gates.
+        limit_mb = app.config["MAX_CONTENT_LENGTH"] / (1024 * 1024)
+        flash(f"File is too large. The limit is {limit_mb:.0f} MB.", "error")
+        return redirect(url_for("uploads.index"))
 
     return app

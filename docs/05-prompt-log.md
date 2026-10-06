@@ -57,3 +57,19 @@ prompt: phase, intent summary, artifacts produced, course-corrections caused.
 - **Notes:** First prompt executed strictly under the approved plan — the
   checkpoint discipline (logs → build → verify → report) is itself part of the
   demonstrated process.
+
+## P-05 — Sprint 1 kickoff · 2026-10-06
+- **Prompt intent:** Sprint 0 verified; proceed to Sprint 1 (Upload & Secure
+  File Storage). Update logs first; no Sprint 2 extraction/parser work; keep to
+  Sprint 1 scope. Specific goals: PDF-only v1, five validation gates (presence,
+  extension, content, 10 MB, 50 pages), safe server-side identifiers, uploads
+  only in `uploads/`, no path traversal or filesystem exposure, duplicates per
+  approved requirements, clear user-facing messages, upload handling separate
+  from extraction services, unit + integration tests for 12 named scenarios
+  with per-case IDs/expected/actual/verdict. After: full suite run, counts,
+  manual upload verification, safe-storage verification, rejection
+  verification, git status, changed-file review, one Sprint 1 commit; report
+  files changed, features, tests, results, verification, commit hash, issues,
+  and confirmation Sprint 2 not started.
+- **Artifacts:** services/uploading.py, db/repository.py, routes/uploads.py,
+  upload UI, test suite (unit + integration), docs/04 results, dev log.

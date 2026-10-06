@@ -12,6 +12,15 @@
     <p class="tagline">local-only · your invoices never leave this machine</p>
   </header>
   <main>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flashes">
+          {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
     {% block content %}{% endblock %}
   </main>
   <script src="{{ url_for('static', filename='js/main.js') }}"></script>
