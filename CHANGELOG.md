@@ -3,6 +3,29 @@
 All notable changes to the Invoice Extractor are documented here.
 The project follows the sprint plan in [docs/03-plan.md](docs/03-plan.md).
 
+## 1.0.0 — Sprint 6: Final Verification, Documentation & Evaluation Readiness (2026-10-06)
+
+Final release. All planned sprints complete; feature freeze in force.
+
+- Final verification at HEAD: full suite **169 passed / 0 failed / 0 skipped**;
+  five real invoices **65/65 field checks** and 23/23 line items; HTTP
+  lifecycle re-verified end to end (upload → extract → review → save →
+  history → search → detail → original → delete cycle).
+- NFR-9 re-verified: clean virtual environment → `pip install -r
+  requirements.txt` → full suite + boot, all green.
+- Security re-verified: Origin 403, GET-delete 405, injection-safe search,
+  contained file serving, invoice isolation.
+- Requirements traceability matrix completed (docs/11): every Must/Should
+  requirement mapped to stories, criteria, implementation, tests, and
+  evidence — with deferred items (edit-after-save, date-range filter/sort,
+  OCR, CSV export) marked **honestly as deferred/not selected**, not hidden.
+- Documentation finalized: retrospective (docs/12), evaluation Q&A (docs/13),
+  README accuracy pass, consolidated final verification record (docs/11).
+- Known deferred items (documented, intentional): edit-after-save (FR-11),
+  date-range filter + user-selected sort (FR-13 partial), OCR (FR-17),
+  CSV export (FR-18).
+
+
 ## 0.6.0 — Sprint 5: Hardening, Edge Cases & OCR Gate (2026-10-06)
 
 - No-text-layer gate: a PDF that opens but contains no selectable text now

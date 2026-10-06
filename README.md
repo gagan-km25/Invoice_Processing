@@ -2,6 +2,9 @@
 
 A **local-only** web application for uploading invoices, automatically extracting
 their details, reviewing/correcting them, and storing them in a local database.
+Built as a complete, documented SDLC exercise: requirements → exploration →
+user stories → design → sprint planning → implementation → testing →
+verification → retrospective (see Documentation below).
 
 - Runs at `http://127.0.0.1:5000` — no cloud, no deployment, no external calls.
 - Extraction: rules/regex on the PDF text layer, with word-coordinate label
@@ -23,14 +26,16 @@ is in place, and smoke tests pass. Features arrive per the approved plan
 | 3 | Review & save to database | ✅ Done |
 | 4 | History, search, details & delete | ✅ Done |
 | 5 | Hardening, edge cases & OCR gate | ✅ Done (OCR gate: NO-GO — deferred, see docs/10) |
-| 6 | Full test pass & documentation | ⬜ |
-| X | OCR (gated — gate result: deferred, docs/10 §5) | ⬜ |
+| 6 | Final verification, docs & retrospective | ✅ Done |
+| X | OCR (gated — gate result: deferred, docs/10 §5) | Deferred |
 
 ## Prerequisites
 
 - **Python 3.14** (verified on 3.14.7, Windows 11) — check with `python --version`
-- No other system dependencies. (Tesseract OCR would be needed only for the
-  gated Sprint X and is **not** installed by this project.)
+- No other system dependencies. **OCR was evaluated and deferred** (Sprint 5
+  OCR Gate: NO-GO — all verified invoices are text-based; see
+  [docs/10-sprint5-design.md](docs/10-sprint5-design.md) §5). Scanned PDFs are
+  detected and rejected with a clear "likely a scan" message.
 
 ## Setup & Run
 
@@ -100,6 +105,10 @@ Invoice-Extractor/
 | [docs/07-invoice-exploration.md](docs/07-invoice-exploration.md) | Real-invoice exploration + parser design |
 | [docs/08-sprint3-design.md](docs/08-sprint3-design.md) | Sprint 3 review/save design |
 | [docs/09-sprint4-design.md](docs/09-sprint4-design.md) | Sprint 4 history/search/detail/delete design |
+| [docs/10-sprint5-design.md](docs/10-sprint5-design.md) | Sprint 5 hardening design + OCR gate decision |
+| [docs/11-final-verification-plan.md](docs/11-final-verification-plan.md) | Final verification plan, traceability matrix, evidence |
+| [docs/12-retrospective.md](docs/12-retrospective.md) | Evidence-based project retrospective |
+| [docs/13-evaluation-q-and-a.md](docs/13-evaluation-q-and-a.md) | Evaluation Q&A: Claude Code usage + project deep-dive |
 
 ## Important Notes
 

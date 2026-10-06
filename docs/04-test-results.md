@@ -427,3 +427,51 @@ injection-safe search ✅ · contained original serving ✅ · invoice isolation
 | I-29 | Duplicate banner listed the same record twice (vendor+number and hash both match) | Deduped id list in the save route |
 | I-30 | Acceptance-script defects: `-X POST -L` re-sent POST on redirect (405 artifact), unquoted extra-args split, wrong grep targets for `&`-escaping and REAL rendering | Script fixed; **app unaffected** — all "failures" were script artifacts or the duplicate gate working |
 | I-31 | **OneDrive re-synced `data/invoices.db` mid-acceptance** (ids shifted; saved records reappeared; "vanishing" rows) — risk T-3/R-4 materialized for real | Fresh re-run from a wiped DB passed cleanly; recommendation recorded: exclude this folder from OneDrive sync or pause it while the app runs |
+
+---
+
+## Sprint 6 — Final Verification, Documentation & Evaluation Readiness · 2026-10-06
+
+**Suite result at HEAD `d22b855`: 169 passed, 0 failed, 0 skipped** —
+re-verified twice (project venv **and** a pristine clean venv, TC-S6-S01).
+No new feature tests were needed; Sprint 6 re-ran and consolidated existing
+evidence, and added finalization records.
+
+### Final verification records
+
+| ID | Check | Result |
+|---|---|---|
+| TC-S6-R01 | Full regression at HEAD (project venv) | ✅ 169/0/0 |
+| TC-S6-E01 | Five-invoice parser verification at HEAD | ✅ ALL 5 PASS — 65/65 fields, 23/23 lines |
+| TC-S6-E02 | HTTP lifecycle at HEAD (all five invoices, every step) | ✅ ALL PASS (Sprint 5 acceptance steps re-run) |
+| TC-S6-S01 | **NFR-9 clean-setup**: fresh venv → `pip install -r requirements.txt` → full suite → boot | ✅ install exit 0 · **169 passed with the clean venv** · boot HTTP 200 · venv removed afterwards |
+| TC-S6-S02 | Security re-verification | ✅ all green in R01 (TC-S3-I18, TC-S4-I16/I17/I20, TC-S4-I18/I07, TC-S5-I04/I05) |
+| TC-S6-E03 | No-text / scanned-PDF gate | ✅ TC-S5-U01/U02/I01 green in R01 |
+| TC-S6-D01 | Docs links/terminology pass (docs 01–13) | ✅ FR-numbering erratum recorded (docs/09 §8 cited FR-14 for search; correct id is FR-13 — noted in docs/11) |
+| TC-S6-D02 | README accuracy | ✅ A-1/A-2 fixed (Tesseract prerequisite → NO-GO note; docs table complete incl. 10–13); full review found no other stale claims |
+| TC-S6-D03 | Traceability matrix complete | ✅ every FR/NFR classified — 24 PASS · 1 PARTIAL (FR-13) · 3 DEFERRED (FR-11, FR-17, FR-18) · 0 unexplained GAPs |
+| TC-S6-D04 | Prompt/dev logs complete | ✅ P-01…P-14; dev log covers Sprints 0–6 chronologically with incidents |
+| TC-S6-O01 | OCR gate recorded | ✅ NO-GO/deferred in docs/04, docs/10 §5, README |
+| TC-S6-M01 | Reviewer walkthrough (docs only) | ✅ PASS — all 13 reconstruction points answerable from docs 01–13; no blocking gaps |
+
+### Manual end-to-end acceptance re-run (live server)
+
+The five real invoices were re-uploaded and driven through the complete
+lifecycle at HEAD (upload → extract → review prefilled → save → history+search
+→ detail → view original): **all steps PASS for all five invoices**, plus the
+duplicate-delete cycle re-verified (upload warning, 409 duplicate gate,
+confirmed duplicate save, delete confirmation, confirmed delete, cascade,
+zero orphans). The application database was left populated with the five
+saved invoices as a working demonstration state.
+
+### Final Definition of Done — verified
+
+**Functional:** all 13 pipeline behaviors evidenced (Sprint 1–5 suites +
+Sprint 6 re-runs). **Quality:** 169/0/0 · security green · real invoices
+65/65 · no raw exceptions on known paths · isolation proven · samples
+unchanged (hashes match) · **clean-environment setup verified (TC-S6-S01)**.
+**SDLC:** requirements/exploration/stories/ACs/architecture/sprint plans/
+prompts/dev logs/tests/failures documented; Git history clean (6 sprint
+commits); traceability matrix complete with honest GAP markings.
+**Evaluation:** retrospective (docs/12) + Q&A (docs/13) + README/docs make
+the project explainable without the developer (TC-S6-M01).

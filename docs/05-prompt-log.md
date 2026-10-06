@@ -223,3 +223,38 @@ prompt: phase, intent summary, artifacts produced, course-corrections caused.
   test_sprint5_hardening.py (TC-S5-*), docs/04 sprint 5 results + manual
   acceptance evidence + OCR decision, docs/06 completion, docs/10 amendments,
   CHANGELOG, README.
+
+## P-13 — Sprint 6 kickoff (planning phase) · 2026-10-06
+- **Prompt intent:** Planning ONLY for the final sprint — final verification,
+  documentation & evaluation readiness. Phase 1: complete project audit
+  (docs 01–10, source, tests, git history/status, the five real invoices) —
+  do not assume docs are complete; document every issue found without fixing
+  during planning. Phase 2: requirements-traceability plan
+  (requirement → story → AC → implementation → test → evidence) with honest
+  GAP markings. Phase 3: final test plan reusing existing evidence (TC-S6-*).
+  Phase 4: SDLC evidence audit (16 areas, PASS/PARTIAL/GAP with evidence).
+  Phase 5: Claude Code + project Q&A readiness plan (no invented answers).
+  Phase 6: final documentation plan — create/update only justified documents.
+  Phase 7: final Definition of Done. Phase 8: retrospective plan (evidence
+  based). STOP after the planning report; no implementation, no commit, no tag.
+- **Artifacts:** docs/11-final-verification-plan.md; log updates.
+- **Planning findings:** audit found A-1…A-12 (stale README Tesseract note,
+  missing traceability matrix, deferred-requirement GAPs FR-11/FR-14-partial/
+  FR-17/FR-18, NFR-9 re-verification needed, retrospective + Q&A docs
+  pending); SDLC audit classified 15 areas PASS, retrospective GAP→planned,
+  traceability PARTIAL→planned.
+
+## P-14 — Sprint 6 finalization · 2026-10-06
+- **Prompt intent:** Planning approved — execute finalization and
+  verification ONLY. Final regression at HEAD; five-invoice verification;
+  clean-venv NFR-9 check (stop-and-report if the environment blocks it);
+  security re-verification; no-text/OCR-gate verification; complete the
+  requirements traceability matrix with honest PASS/PARTIAL/DEFERRED/GAP
+  classifications (FR-11 deferred, FR-13 partial, FR-17 deferred, FR-18 not
+  selected); final documentation audit + corrections (README A-1/A-2,
+  CHANGELOG 1.0.0); evidence-based retrospective (docs/12); evaluation Q&A
+  (docs/13); reviewer walkthrough using documentation alone; final Definition
+  of Done verification. Feature freeze in force. **No commit, no tag** —
+  stop after the finalization report.
+- **Artifacts:** docs/11 final results + traceability matrix, docs/12,
+  docs/13, docs/04 sprint 6 records, README/CHANGELOG finalization, dev log.

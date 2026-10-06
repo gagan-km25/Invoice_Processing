@@ -257,6 +257,20 @@ all five real invoices through the complete lifecycle, recorded in docs/04.
 OCR gate outcome (NO-GO, evidence in docs/10 §5) gets recorded in docs/04 and
 README. No commit until verified and approved.
 
+**Sprint 6 — Final verification, documentation & evaluation readiness
+(finalization complete; not committed).** All planned checks executed:
+TC-S6-R01 full regression 169/0/0 (twice — project venv and a pristine clean
+venv); TC-S6-S01 NFR-9 clean-setup verified end to end (fresh venv → install
+→ suite → boot, then removed); TC-S6-E01/E02 five-invoice parser and
+HTTP-lifecycle verification ALL PASS (65/65); TC-S6-S02 security and
+TC-S6-E03 no-text gate re-verified via the green suite; documentation
+finalized (README A-1/A-2 fixed, CHANGELOG 1.0.0, docs/11 final verification
+record + complete traceability matrix with the FR-numbering erratum noted,
+docs/12 evidence-based retrospective, docs/13 evaluation Q&A); reviewer
+walkthrough (TC-S6-M01) PASS — all 13 reconstruction points are answerable
+from the documentation. Feature freeze held: no application code changes in
+Sprint 6. Not committed and not tagged — awaiting approval.
+
 **Sprint 5 — Hardening, edge cases & OCR gate (implementation complete; not
 committed).** The only production change: the no-text-layer gate in the
 extraction service (US-S5-01) — a valid PDF with no selectable text now fails
@@ -273,3 +287,26 @@ shifted, saved records reappeared) — risk T-3/R-4 materialized; resolved by a
 fresh re-run from a wiped DB; user recommendation recorded (exclude folder
 from sync or pause it). Also fixed: duplicate banner listed the same record
 twice (I-29). Not committed — awaiting approval.
+
+**Sprint 6 — Final verification, documentation & evaluation readiness
+(started; planning phase).** Sprint 5 committed as `d22b855` (169/0/0). P-13
+logged. Planning-only audit of the complete project produced findings A-1…A-12
+([11-final-verification-plan.md](11-final-verification-plan.md) §2): stale
+README Tesseract note and missing doc links, no consolidated traceability
+matrix (A-3), four honest requirement GAPs to record (edit-after-save,
+date-range filter + sort partial, OCR, CSV export — all deferred/decided, none
+silent), NFR-9 clean-setup re-verification due, and three final deliverables
+planned (final verification record, retrospective, evaluation Q&A). SDLC
+evidence audit: 15 areas PASS, retrospective GAP→planned, traceability
+PARTIAL→planned. Implementation awaits design approval.
+
+**Sprint 6 — Final verification, documentation & evaluation readiness
+(finalization started).** Planning approved; P-14 logged. Execution order:
+final regression (TC-S6-R01) → five-invoice verification (TC-S6-E01) →
+clean-venv NFR-9 check (TC-S6-S01) → security/no-text re-verification
+(TC-S6-S02/E03, largely covered by the Sprint 3–5 suites and re-cited) →
+documentation corrections (README A-1/A-2, CHANGELOG 1.0.0) → traceability
+matrix + final evidence appended to docs/11 → docs/12 retrospective and
+docs/13 evaluation Q&A → reviewer walkthrough (TC-S6-M01). Feature freeze in
+force: documentation and verification only. No commit and no tag until
+verified and approved.
