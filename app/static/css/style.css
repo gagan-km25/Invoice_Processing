@@ -1,0 +1,37 @@
+/* Invoice Extractor — local stylesheet, no CDN assets (NFR-1: works offline). */
+:root {
+  --ink: #1f2933;
+  --muted: #616e7c;
+  --line: #e4e7eb;
+  --accent: #1f6feb;
+  --panel: #ffffff;
+  --bg: #f5f7fa;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  line-height: 1.5;
+}
+
+.site-header {
+  padding: 1.25rem 1.5rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.site-header h1 { margin: 0; font-size: 1.25rem; }
+.tagline { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.85rem; }
+
+main { max-width: 60rem; margin: 0 auto; padding: 1.5rem; }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+}

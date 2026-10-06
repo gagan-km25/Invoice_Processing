@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+venv/
+
+# Local data — never commit (privacy + generated at boot).
+# Real invoices live here; see docs/01 §10 (M-2: sample invoices stay local).
+data/
+uploads/
+*.db
+sample_invoices/*
+!sample_invoices/.gitkeep
+
+# OS noise
+.DS_Store
+Thumbs.db
