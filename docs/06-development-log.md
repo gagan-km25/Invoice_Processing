@@ -56,3 +56,18 @@ Scope discipline for this sprint: scaffold only — no upload gates, no
 extraction, no parser (those belong to Sprints 1–2). Exit criteria: smoke
 tests green, server verified on 127.0.0.1, structure matches plan §1, first
 commit made.
+
+**Sprint 0 — Foundation (complete).**
+All exit criteria met. M-1 executed as a move: the old folder's *contents*
+(including `.git`) went to `../invoice-extractor-archive-2026-10-05/` — the
+folder handle was held by another program, so contents were moved one by one,
+history verified intact (commit `f518ca8`), and the empty shell removed.
+Nothing was deleted. Structure created per plan §1; venv + pinned deps
+installed cleanly on Python 3.14 (risk T-2 retired); app factory, config
+(localhost-only, 10 MB / 50 pages), idempotent schema with M-3 money
+documentation delivered. Smoke tests 3/3 green in 0.20 s; real-server boot
+verified (HTTP 200, 127.0.0.1 binding, DB created). First commit `72b30cb`;
+working tree clean. Results recorded in
+[04-test-results.md](04-test-results.md) (issues I-1–I-3 noted there). No
+later-sprint features were built. Ready for Sprint 1 (upload & store) on the
+user's go-ahead; awaiting sample invoices (M-2) by Sprint 2.
