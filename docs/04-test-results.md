@@ -367,3 +367,63 @@ five real invoices re-verified after implementation: **65/65 field checks,
 | I-25 | Cascade test deleted an **extracted** (not saved) record — guard correctly refused | Test now saves first, matching the approved guard |
 | I-26 | `_upload_and_save` returns an id; regression test misused it as a response | Test rewritten against persisted state |
 | I-27 | Test-file hygiene: stray placeholder constant, late import, contradictory assertion | Cleaned |
+
+---
+
+## Sprint 5 — Hardening, Edge Cases & OCR Gate · 2026-10-06
+
+**Suite result: 169 passed, 0 failed, 0 skipped** (5 new cases; full Sprint
+0–4 regression green). Design: [10-sprint5-design.md](10-sprint5-design.md).
+
+### New tests (`tests/integration/test_sprint5_hardening.py`)
+
+| ID | Scenario | Verdict |
+|---|---|---|
+| TC-S5-U01 | Valid PDF with no text → extraction fails with "likely a scan" message; record `failed` with reason (AC-01.1) | ✅ |
+| TC-S5-U02 | Text-bearing PDFs unaffected by the gate (AC-01.3) | ✅ |
+| TC-S5-I01 | HTTP: no-text PDF → flash + `failed` + review refused (AC-01.2) | ✅ |
+| TC-S5-I03 | Error-path audit: wrong type, missing file, corrupt, oversize, unknown ids, GET-delete, injection search — **no 500s**, app healthy after (AC-02.1) | ✅ |
+| TC-S5-I04/I05 | **Invoice data isolation**: two invoices; no value of A appears on B's review/detail/history and vice versa (AC-03.1–2) | ✅ |
+
+### OCR Gate decision (US-S5-05) — **NO-GO / defer OCR**
+
+Recorded evidence: all five real invoices are text-based (560–752 chars
+extractable, zero images, stable tables — re-inspected this sprint);
+pdfplumber extracts everything (65/65 fields, 23/23 lines across Sprints 2–5);
+OCR is a gated **Could** tier (FR-17/T-I), not a requirement; Tesseract is not
+installed; implementing OCR would add a system dependency and an entire
+second extraction path for zero current invoices. The graceful "likely a
+scan" failure (US-S5-01) ships instead, and the pluggable extractor keeps a
+future OCR tier cheap. **No OCR code was added.**
+
+### Manual acceptance — five real invoices, full lifecycle (US-S5-04)
+
+Scripted HTTP run against the live server: upload → validate → extract →
+review (prefilled) → save → history+search → detail → view original — then a
+duplicate-delete cycle on a re-uploaded invoice.
+
+| Invoice | upload+extract | review prefilled | save | history+search | detail | original |
+|---|---|---|---|---|---|---|
+| invoice_001_retail | ✅ | ✅ | ✅ saved | ✅ | ✅ | ✅ application/pdf |
+| invoice_002_services | ✅ | ✅ | ✅ saved | ✅ | ✅ | ✅ |
+| invoice_003_multiitem | ✅ | ✅ | ✅ saved | ✅ | ✅ | ✅ |
+| invoice_004_alternate | ✅ | ✅ | ✅ saved | ✅ | ✅ | ✅ |
+| invoice_005_complex | ✅ | ✅ | ✅ saved | ✅ | ✅ | ✅ |
+
+Duplicate-delete cycle: upload warning ✅ · save-time 409 duplicate gate ✅ ·
+confirmation checkbox ✅ · confirmed duplicate save ✅ · delete confirmation
+step ✅ · confirmed delete + cascade ✅ · zero orphans ✅.
+
+### Security regression (US-S5-06)
+
+Origin/Host 403 on cross-site POSTs ✅ · GET-delete 405 ✅ · 404s ✅ ·
+injection-safe search ✅ · contained original serving ✅ · invoice isolation ✅.
+
+### Issues found and fixed during Sprint 5
+
+| # | Issue | Fix |
+|---|---|---|
+| I-28 | No-text-layer PDFs silently became all-missing extractions (AC-7.1 gap) | No-text gate in the extraction service (US-S5-01) |
+| I-29 | Duplicate banner listed the same record twice (vendor+number and hash both match) | Deduped id list in the save route |
+| I-30 | Acceptance-script defects: `-X POST -L` re-sent POST on redirect (405 artifact), unquoted extra-args split, wrong grep targets for `&`-escaping and REAL rendering | Script fixed; **app unaffected** — all "failures" were script artifacts or the duplicate gate working |
+| I-31 | **OneDrive re-synced `data/invoices.db` mid-acceptance** (ids shifted; saved records reappeared; "vanishing" rows) — risk T-3/R-4 materialized for real | Fresh re-run from a wiped DB passed cleanly; recommendation recorded: exclude this folder from OneDrive sync or pause it while the app runs |

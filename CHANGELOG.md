@@ -3,6 +3,21 @@
 All notable changes to the Invoice Extractor are documented here.
 The project follows the sprint plan in [docs/03-plan.md](docs/03-plan.md).
 
+## 0.6.0 — Sprint 5: Hardening, Edge Cases & OCR Gate (2026-10-06)
+
+- No-text-layer gate: a PDF that opens but contains no selectable text now
+  fails with the specific "likely a scan" message (and a `failed` record)
+  instead of silently producing an all-missing extraction (AC-7.1).
+- OCR Gate decision recorded: **NO-GO — deferred**. All five real invoices are
+  text-based, pdfplumber is proven sufficient, Tesseract is not installed.
+  No OCR code added; the extractor remains pluggable.
+- Error-path audit: every known failure input responds with handled statuses
+  and user-facing messaging — no 500s; invoice-isolation tests added.
+- Duplicate banner no longer lists the same record twice.
+- Tests: 5 new cases (TC-S5-*) — suite 169/169; manual acceptance pass over
+  all five real invoices recorded in docs/04.
+
+
 ## 0.5.0 — Sprint 4: History, Search, Details & Delete (2026-10-06)
 
 - Invoice history page (`/invoices`): saved invoices only, newest first

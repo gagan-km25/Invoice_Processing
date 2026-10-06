@@ -22,9 +22,9 @@ is in place, and smoke tests pass. Features arrive per the approved plan
 | 2 | Automatic field extraction | ✅ Done |
 | 3 | Review & save to database | ✅ Done |
 | 4 | History, search, details & delete | ✅ Done |
-| 5 | Hardening & manual acceptance | ⬜ |
+| 5 | Hardening, edge cases & OCR gate | ✅ Done (OCR gate: NO-GO — deferred, see docs/10) |
 | 6 | Full test pass & documentation | ⬜ |
-| X | OCR (gated — see plan, T-I) | ⬜ |
+| X | OCR (gated — gate result: deferred, docs/10 §5) | ⬜ |
 
 ## Prerequisites
 

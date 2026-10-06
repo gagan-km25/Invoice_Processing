@@ -49,6 +49,18 @@ def extract_invoice(invoice_id: int) -> tuple[bool, str]:
                 for page in pdf.pages
                 for table in (page.extract_tables() or [])
             ]
+
+        # No-text-layer gate (US-S5-01, AC-7.1): a valid PDF with (almost) no
+        # selectable text is almost certainly a scan. Fail with the specific
+        # message instead of silently producing an all-missing extraction.
+        if len(text.strip()) < 20:
+            reason = (
+                "The PDF contains no selectable text — it is likely a scan. "
+                "OCR is not available in this version; use a text-based PDF."
+            )
+            _mark_failed(invoice_id, reason)
+            return False, reason
+
         draft = parser.parse(text, tables, page_count=page_count)
     except Exception as exc:  # noqa: BLE001 — deliberate failure containment
         _mark_failed(invoice_id, f"extraction error: {exc}")

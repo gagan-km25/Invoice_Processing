@@ -230,3 +230,46 @@ real invoices re-verified 65/65. **Issues:** I-24…I-27 (test-side import,
 guard, and helper misuse — all fixed; no implementation defects required
 changes beyond none). Edit-after-save deferral upheld: no edit routes exist.
 Not committed — awaiting approval.
+
+**Sprint 5 — Hardening, edge cases & OCR gate (started; planning phase).**
+Sprint 4 committed as `6ac1de8` (164/0/0). P-11 logged. Fresh OCR-gate
+evidence gathered from the five real invoices: all are text-based (560–752
+chars extractable, zero images, stable tables) — combined with the 65/65
+accuracy record, **the gate decision is NO-GO for OCR implementation**
+(Does-require? No — FR-17 is a gated Could; Tesseract absent; complexity
+without benefit). The decision and evidence are recorded in
+[10-sprint5-design.md](10-sprint5-design.md) §5, to be duplicated into
+docs/04 and README at implementation. One genuine hardening gap found in the
+planning audit: a no-text-layer (scanned) PDF currently lands `extracted`
+with an all-missing draft instead of the specific AC-7.1 "likely a scan"
+failure — planned as US-S5-01, the sprint's only production change. Planning
+only; implementation awaits approval.
+
+**Sprint 5 — Hardening, edge cases & OCR gate (implementation started).**
+Planning approved; P-12 logged. Implementation scope is deliberately tiny:
+the **only production change** is the no-text-layer gate in the extraction
+service (a valid PDF with no extractable text fails with the specific
+"likely a scan" message instead of becoming an all-missing draft — closes the
+AC-7.1 gap found in planning). Everything else is verification: TC-S5 unit +
+integration tests (no-text path, error-path audit, isolation), full
+regression, security re-checks, and the scripted manual acceptance pass over
+all five real invoices through the complete lifecycle, recorded in docs/04.
+OCR gate outcome (NO-GO, evidence in docs/10 §5) gets recorded in docs/04 and
+README. No commit until verified and approved.
+
+**Sprint 5 — Hardening, edge cases & OCR gate (implementation complete; not
+committed).** The only production change: the no-text-layer gate in the
+extraction service (US-S5-01) — a valid PDF with no selectable text now fails
+with the specific "likely a scan" message. **Tests:** 5 new cases
+(TC-S5-U01/U02, TC-S5-I01/I03, TC-S5-I04/I05); suite **169 passed / 0 failed /
+0 skipped**; error-path audit confirms no known failure input produces a 500;
+invoice-isolation tests prove zero cross-invoice data leakage. **OCR gate:
+NO-GO — deferred**, decision + evidence recorded in docs/04 and docs/10 §5;
+no OCR code added. **Manual acceptance:** all five real invoices passed the
+full lifecycle (upload → extract → review → save → history+search → detail →
+original), plus a duplicate-delete cycle — evidence table in docs/04.
+**Incident:** OneDrive re-synced `data/invoices.db` mid-acceptance (ids
+shifted, saved records reappeared) — risk T-3/R-4 materialized; resolved by a
+fresh re-run from a wiped DB; user recommendation recorded (exclude folder
+from sync or pause it). Also fixed: duplicate banner listed the same record
+twice (I-29). Not committed — awaiting approval.

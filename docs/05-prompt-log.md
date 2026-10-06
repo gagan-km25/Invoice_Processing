@@ -183,3 +183,43 @@ prompt: phase, intent summary, artifacts produced, course-corrections caused.
   services/invoices.py, history/detail/confirm_delete templates, original
   serving route, delete flow, unit + integration suites, docs 04/06/09,
   CHANGELOG, README.
+
+## P-11 — Sprint 5 kickoff (planning phase) · 2026-10-06
+- **Prompt intent:** Planning ONLY for a hardening & verification sprint — no
+  application code, no parser-behavior changes, no new features, no commits.
+  Inspect the complete current state (docs 01–08 + README/CHANGELOG,
+  implementation, git history at `6ac1de8`, the five real invoices, error
+  paths). Identify realistic edge cases and failure modes; review
+  error-message quality; perform a **formal, evidence-based OCR gate
+  evaluation** (text-based? pdfplumber sufficient? requirement demand?
+  engine availability? complexity vs. benefit?) and decide Sprint 5's OCR
+  stance. Plan hardening user stories with measurable ACs (corrupt/empty/
+  malformed/password PDFs, oversize/page-count, invalid types, missing
+  fields, malformed values, unusual line items, DB failure, duplicates,
+  deletion/search/original regressions, user-friendly errors, isolation,
+  security, real-invoice acceptance), the test strategy (TC-S5-*), risks, and
+  explicit scope boundaries (OCR implementation out unless the gate proves
+  necessity; no Sprint 6 work). Create docs/10-sprint5-design.md; update
+  docs/05 + docs/06. STOP for approval before implementing.
+- **Artifacts:** docs/10-sprint5-design.md; log updates; fresh OCR-gate
+  evidence gathered from the five invoices (all text-based, zero images).
+
+## P-12 — Sprint 5 implementation · 2026-10-06
+- **Prompt intent:** Planning approved — implement Sprint 5 exactly per
+  [10-sprint5-design.md](10-sprint5-design.md). Approved scope only:
+  US-S5-01 no-text-layer gate (a PDF that opens but has no extractable text
+  must fail with the approved "likely scanned" message, never proceed as an
+  all-missing extraction); US-S5-02 error-path hardening (no raw exceptions,
+  no crashes, stable messages, no partial data); US-S5-03 explicit isolation
+  regression tests; US-S5-04 manual acceptance over ALL FIVE real invoices
+  through the full lifecycle (upload→…→delete), results recorded per invoice
+  in docs/04; US-S5-05 record the OCR Gate decision **NO-GO — defer OCR**
+  (no OCR implementation); US-S5-06 full regression + security verification.
+  Logs first; no unapproved features; parser untouched except the approved
+  gate; no schema changes; samples must remain unchanged and git-ignored;
+  verify no Sprint 6 functionality and no OCR added. **Do not commit** —
+  stop after verification and wait for approval.
+- **Artifacts:** extraction.py no-text gate, tests/integration/
+  test_sprint5_hardening.py (TC-S5-*), docs/04 sprint 5 results + manual
+  acceptance evidence + OCR decision, docs/06 completion, docs/10 amendments,
+  CHANGELOG, README.

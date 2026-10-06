@@ -143,6 +143,7 @@ def save(invoice_id: int):
     duplicates = list(duplicates) + _saved_hash_duplicates(record)
     if duplicates and not request.form.get("confirm_duplicate"):
         values, line_rows = form_to_view(request.form)
+        dup_ids = sorted({row["id"] for row in duplicates})
         return render_template(
             "review.html",
             invoice=record,
@@ -152,7 +153,7 @@ def save(invoice_id: int):
             errors={},
             warnings=result["warnings"]
             + ["This invoice may be a duplicate — see the warning above."],
-            dup_ids=[row["id"] for row in duplicates],
+            dup_ids=dup_ids,
         ), 409
 
     conn = get_db()
