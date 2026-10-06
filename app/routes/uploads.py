@@ -12,6 +12,7 @@ from flask import (
 
 from app.db import get_db
 from app.db.repository import find_by_hash, list_recent
+from app.services.extraction import extract_invoice
 from app.services.uploading import UploadRejected, store_upload
 
 bp = Blueprint("uploads", __name__)
@@ -49,4 +50,12 @@ def upload():
             "It was stored again anyway.",
             "warning",
         )
+
+    # Sprint 2: extraction runs synchronously in-request (plan §4 steps 8–10);
+    # review/edit UI arrives in Sprint 3.
+    ok, message = extract_invoice(invoice["id"])
+    if ok:
+        flash(f"Extraction complete (record #{invoice['id']}): {message}.", "success")
+    else:
+        flash(f"Extraction failed (record #{invoice['id']}): {message}.", "error")
     return redirect(url_for("uploads.index"))

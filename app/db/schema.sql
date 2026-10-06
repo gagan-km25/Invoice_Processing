@@ -13,11 +13,14 @@ CREATE TABLE IF NOT EXISTS invoices (
     original_filename TEXT NOT NULL,
     stored_filename   TEXT NOT NULL,           -- server-generated UUID name
     vendor            TEXT,
+    vendor_tax_id     TEXT,                    -- GSTIN/VAT/... (Sprint 2)
     invoice_number    TEXT,
     invoice_date      TEXT,                    -- ISO 8601 (YYYY-MM-DD)
     due_date          TEXT,                    -- ISO 8601 (YYYY-MM-DD)
+    bill_to           TEXT,                    -- customer (Sprint 2)
     currency          TEXT,
     subtotal          REAL,
+    discount          REAL,                    -- Sprint 2 (exploration finding 5)
     tax               REAL,
     tax_rate          REAL,
     total             REAL,

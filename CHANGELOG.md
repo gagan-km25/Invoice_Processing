@@ -3,6 +3,29 @@
 All notable changes to the Invoice Extractor are documented here.
 The project follows the sprint plan in [docs/03-plan.md](docs/03-plan.md).
 
+## 0.3.0 — Sprint 2: Invoice Extraction & Parser (2026-10-06)
+
+- Real-invoice exploration before implementation (docs/07): five sample PDFs
+  profiled field-by-field; findings drove the design (currency glyph
+  corruption, DD-Mon-YYYY dates, absent due dates, discount/GSTIN/bill-to
+  fields, totals-inside-table structure).
+- Pure parser package: whitespace/date/amount/currency/number normalization
+  (Decimal at boundaries, M-3), label dictionaries with preference orders and
+  word-boundary matching, geometric fallback, per-field status model
+  (found/ambiguous/missing + evidence), per-strategy error containment.
+- Line-item extraction from tables with item/summary separation; malformed
+  rows dropped, never guessed.
+- Extraction service: pdfplumber two-view → parser → atomic persist of header
+  columns, line items, and resumable `extraction_json` draft; failures become
+  `failed` records with readable reasons.
+- Schema migration: `discount`, `vendor_tax_id`, `bill_to` columns added
+  idempotently on boot.
+- Upload flow now runs extraction synchronously and flashes the outcome.
+- Tests: 58 new cases (unit parser + robustness + integration incl. the five
+  real invoices with exact expected values) — suite 88/88; field-level
+  accuracy 65/65 header fields and 23/23 line items on real samples.
+
+
 ## 0.2.0 — Sprint 1: Upload & Secure File Storage (2026-10-06)
 
 - Upload page with drag-free file picker, flash feedback, and a recent-uploads

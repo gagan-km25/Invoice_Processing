@@ -73,3 +73,31 @@ prompt: phase, intent summary, artifacts produced, course-corrections caused.
   and confirmation Sprint 2 not started.
 - **Artifacts:** services/uploading.py, db/repository.py, routes/uploads.py,
   upload UI, test suite (unit + integration), docs/04 results, dev log.
+
+## P-06 — Sprint 2 kickoff · 2026-10-06
+- **Prompt intent:** Proceed to Sprint 2 (Invoice Extraction & Parser) with a
+  mandated phase order. **Before implementation:** update logs; review docs
+  01–04; inspect all five sample PDFs with pdfplumber; never modify/rename/
+  delete/commit the samples. **Phase A — real invoice exploration:** document
+  per invoice: page count, plain text, ordering, tables, invoice number, date,
+  vendor, vendor address, GST/tax id, bill-to, line items (description/qty/
+  unit price/amount), subtotal, discount, tax rate/amount, grand total,
+  currency, missing/ambiguous fields; plus extraction characteristics (text
+  cleanliness, table reliability, coordinate usefulness, values split across
+  lines, layout-specific strategies). Write an exploration report; do not
+  assume a field exists. **Phase B — parser design before code:** normalized
+  data model, per-field strategies, normalization rules (dates, currency,
+  decimals, whitespace, invoice numbers), line-item strategy, missing/ambiguous
+  handling, validation, confidence/status, layout discrimination, error
+  reporting without crashes. **Phase C — short implementation plan, then code.**
+  **Phase D — tests:** per-layout + per-field categories with IDs and real
+  expected values asserted exactly (not merely non-empty). **Phase E —
+  verification:** full suite, parser run on all five invoices, per-invoice
+  extracted results, field-level accuracy, fixes + rerun, docs 04/06 +
+  CHANGELOG updates, changed-file review, git-ignore check for samples, one
+  Sprint 2 commit. **Scope control:** no review/edit UI, no save workflow, no
+  management features (Sprint 3); no OCR unless exploration proves necessity
+  (Tesseract unavailable — do not add silently).
+- **Artifacts:** docs/07-invoice-exploration.md (findings + design + plan),
+  app/services/parser/* , services/extraction.py, upload→extract wiring,
+  test suite growth, docs/04 sprint 2 results, CHANGELOG.

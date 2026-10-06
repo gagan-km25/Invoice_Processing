@@ -105,3 +105,41 @@ produced phantom 500s — killed by PID; session-cookie requirement for flash
 visibility over curl; a handful of test defects fixed before green (I-4…I-7).
 **Scope kept:** no extraction or parser code — that is Sprint 2. Commit:
 `sprint-1` (see git log for hash).
+
+**Sprint 2 — Invoice extraction & parser (started).**
+Prompt P-06 logged first. M-2 fulfilled: five real sample PDFs now in
+`sample_invoices/` (git-ignored, verified). Process mandated by the user:
+**Phase A** real-invoice exploration with pdfplumber before any parser code
+(document every field actually present — no assumptions), **Phase B** parser
+design from findings, **Phase C** implementation plan then code, **Phase D**
+tests asserting exact expected values derived from the real contents,
+**Phase E** verification with per-invoice extracted results and field-level
+accuracy. Findings and design to be recorded in docs/07-invoice-exploration.md.
+OCR stays out unless exploration proves it necessary (Tesseract unavailable).
+Scope: extraction/parser only — no review UI, save flow, or management.
+
+**Sprint 2 — Invoice extraction & parser (complete).**
+Phases executed as mandated. **A — exploration first:** all five samples
+inspected with pdfplumber before any parser code; findings recorded in
+[07-invoice-exploration.md](07-invoice-exploration.md). The real invoices
+changed the design in five ways: currency glyph corrupts to 'n' (→
+evidence-based INR inference, flagged ambiguous), dates are DD-Mon-YYYY, no
+due date exists ("Payment: Due on receipt" must not parse as one), discount +
+GSTIN + bill-to fields exist (→ schema gained `discount`, `vendor_tax_id`,
+`bill_to` via idempotent boot migration), and totals live inside the item
+table (→ item/summary row separation). **B/C — design & plan** documented in
+docs/07 §Phase B/C before coding. **Implementation:** pure parser package
+(normalize / labels / fields / lines / parse with per-strategy containment),
+`services/extraction.py` (two-view → parse → atomic persist, status
+extracted/failed), repository `update_extraction`, upload route wired to
+extract in-request. **Testing:** 58 new cases; expected values asserted
+exactly against exploration transcriptions. **Verification:** full suite
+**88/0/0**; field-level accuracy **65/65 header fields (incl. 5
+ambiguous-flagged currency), 23/23 line items, 10/10 consistency checks**.
+**Issues:** seven real parser bugs caught and fixed during bring-up (mid-line
+labels, GSTIN/gst collision, rate-into-amount merge, Subtotal/total prefix
+collision, tuple double-unpack, eager vendor fallback, containment
+double-wrap) plus one refactor NameError the suite caught (I-8…I-17 in
+docs/04). **Scope kept:** no review UI, no save workflow, no management
+features — Sprint 3. Samples remain git-ignored (verified). Commit: see git
+log `sprint-2`.

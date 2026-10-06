@@ -24,7 +24,7 @@ def test_valid_upload_round_trip(app, client, make_pdf):
     assert response.status_code == 200
     assert b"Uploaded successfully" in response.data
     assert b"sample.pdf" in response.data  # listed in Recent uploads
-    assert b"uploaded" in response.data    # status badge
+    assert b"extracted" in response.data  # status badge (S2 runs extraction)
 
     conn = sqlite3.connect(app.config["DATABASE"])
     conn.row_factory = sqlite3.Row
@@ -33,7 +33,7 @@ def test_valid_upload_round_trip(app, client, make_pdf):
     finally:
         conn.close()
     assert len(rows) == 1
-    assert rows[0]["status"] == "uploaded"
+    assert rows[0]["status"] == "extracted"  # Sprint 2 wires extraction into upload
     stored = app.config["UPLOAD_DIR"] / rows[0]["stored_filename"]
     assert stored.exists()
     assert stored.read_bytes() == pdf_bytes  # byte-for-byte storage

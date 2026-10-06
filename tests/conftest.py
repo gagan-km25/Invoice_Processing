@@ -48,29 +48,53 @@ def client(app):
 # Sprint 2 will extend this with text content for extraction fixtures.
 # --------------------------------------------------------------------------
 
-def _write_pdf(path, pages: int) -> bytes:
-    kids = " ".join(f"{number} 0 R" for number in range(3, 3 + pages))
-    objects = [
-        b"<< /Type /Catalog /Pages 2 0 R >>",
-        f"<< /Type /Pages /Kids [{kids}] /Count {pages} >>".encode(),
-    ]
-    objects += [
-        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>"
-        for _ in range(pages)
-    ]
+def _pdf_escape(text: str) -> str:
+    return text.replace("\\", r"\\").replace("(", r"\(").replace(")", r"\)")
+
+
+def _write_pdf(path, pages: int, text_lines: list[str] | None = None) -> bytes:
+    """Build a structurally valid PDF; with `text_lines`, pages carry real
+    extractable text (one line per visual row) via simple content streams.
+
+    Object layout: 1 catalog, 2 page-tree, 3 font, then per page a page
+    object (even) and a content object (odd).
+    """
+    kids = " ".join(f"{4 + i * 2} 0 R" for i in range(pages))
+    objects: dict[int, bytes] = {
+        1: b"<< /Type /Catalog /Pages 2 0 R >>",
+        2: f"<< /Type /Pages /Kids [{kids}] /Count {pages} >>".encode(),
+        3: b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    }
+    for i in range(pages):
+        page_number, content_number = 4 + i * 2, 5 + i * 2
+        if text_lines:
+            parts = [b"BT /F1 11 Tf 72 740 Td 16 TL"]
+            for line in text_lines:
+                parts.append(f"({_pdf_escape(line)}) Tj T*".encode())
+            stream = b" ".join(parts) + b" ET"
+        else:
+            stream = b""
+        objects[page_number] = (
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+            f"/Resources << /Font << /F1 3 0 R >> >> "
+            f"/Contents {content_number} 0 R >>"
+        ).encode()
+        objects[content_number] = (
+            f"<< /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream"
+        )
 
     out = bytearray(b"%PDF-1.4\n")
-    offsets = []
-    for number, body in enumerate(objects, start=1):
-        offsets.append(len(out))
-        out += f"{number} 0 obj\n".encode() + body + b"\nendobj\n"
+    offsets: dict[int, int] = {}
+    for number in sorted(objects):
+        offsets[number] = len(out)
+        out += f"{number} 0 obj\n".encode() + objects[number] + b"\nendobj\n"
 
     xref_position = len(out)
-    count = len(objects) + 1
+    count = max(objects) + 1
     out += f"xref\n0 {count}\n".encode()
     out += b"0000000000 65535 f \n"
-    for offset in offsets:
-        out += f"{offset:010d} 00000 n \n".encode()
+    for number in range(1, count):
+        out += f"{offsets[number]:010d} 00000 n \n".encode()
     out += (
         f"trailer\n<< /Size {count} /Root 1 0 R >>\n"
         f"startxref\n{xref_position}\n%%EOF\n"
@@ -82,10 +106,11 @@ def _write_pdf(path, pages: int) -> bytes:
 
 @pytest.fixture()
 def make_pdf(tmp_path):
-    """make_pdf(name="sample.pdf", pages=1) -> Path of a valid PDF in tmp_path."""
+    """make_pdf(name, pages=1, text_lines=None) -> (Path, bytes) of a valid PDF."""
 
-    def _make(name: str = "sample.pdf", pages: int = 1):
-        return tmp_path / name, _write_pdf(tmp_path / name, pages)
+    def _make(name: str = "sample.pdf", pages: int = 1, text_lines=None):
+        path = tmp_path / name
+        return path, _write_pdf(path, pages, text_lines)
 
     return _make
 
