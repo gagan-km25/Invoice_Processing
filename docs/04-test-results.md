@@ -222,3 +222,79 @@ parser implementation, and asserted exactly.
 | I-15 | `tax_id` NameError after refactor → all fields missing (caught by suite) | use `fields["vendor_tax_id"]` |
 | I-16 | Draft JSON serializes Decimals as strings | test expectation documents the JSON representation |
 | I-17 | Sprint-1 round-trip expectations updated for extraction now running at upload (status `extracted`) | test updated, change documented |
+
+---
+
+## Sprint 3 — Review, Edit & Atomic Save · 2026-10-06
+
+**Suite result: 128 passed, 0 failed, 0 skipped** in ~7 s (40 new cases; Sprint 0–2
+regression all green). Design: [08-sprint3-design.md](08-sprint3-design.md).
+
+### Unit — review validation service (`tests/unit/test_review_validation.py`)
+
+| ID | Scenario | Verdict |
+|---|---|---|
+| TC-S3-U01 | Minimal valid form → ok, Decimals quantized | ✅ |
+| TC-S3-U02 | Blank required fields (number/date/subtotal/total) → blocked | ✅ |
+| TC-S3-U03 | `15/01/2026` → blocked, YYYY-MM-DD named | ✅ |
+| TC-S3-U04 | Due date before invoice date → warning, not blocked | ✅ |
+| TC-S3-U05 | `1250.5` → quantized `1250.50` | ✅ |
+| TC-S3-U06 | Non-numeric subtotal → blocked, field named | ✅ |
+| TC-S3-U07 | Currency: `usd`→USD, `euros` blocked, blank ok | ✅ |
+| TC-S3-U08 | Quantity 0 → blocked ("above 0") | ✅ |
+| TC-S3-U09 | Negative unit price → blocked | ✅ |
+| TC-S3-U10 | Fully blank rows silently ignored (AC-03.4) | ✅ |
+| TC-S3-U11 | Removed row dropped | ✅ |
+| TC-S3-U12 | Numbers without description → error naming the row | ✅ |
+| TC-S3-U13 | Line amount ≠ qty × unit → warning, save allowed | ✅ |
+| TC-S3-U14 | subtotal+tax ≠ total → warning, save allowed (E-16) | ✅ |
+| TC-S3-U15 | Kept lines renumbered 1..n in submitted order | ✅ |
+| TC-S3-U16 | >200-char text rejected | ✅ |
+| TC-S3-U17 | Empty form → the four required errors | ✅ |
+| TC-S3-U18 | Draft prefill: values stringified, missing → blank, flags kept | ✅ |
+| TC-S3-U19 | Blank-row slots continue index sequence | ✅ |
+| TC-S3-U20 | parse_line_rows round-trips user input | ✅ |
+
+### Integration — review → save over HTTP (`tests/integration/test_review_save_flow.py`)
+
+| ID | Scenario | Verdict |
+|---|---|---|
+| TC-S3-I01 | Upload lands on review; values pre-filled; flags shown; Review link on home (AC-01.1/01.2) | ✅ |
+| TC-S3-I02 | Unknown id → 404 (AC-01.4) | ✅ |
+| TC-S3-I03 | Non-extracted record → friendly redirect, no form (AC-01.4) | ✅ |
+| TC-S3-I04 | Corrected values persist exactly (AC-02.1) | ✅ |
+| TC-S3-I05 | Untouched fields keep extraction values (AC-02.2) | ✅ |
+| TC-S3-I06 | Line edit + remove + add on real invoice_001 (3 lines → 3 lines, renumbered) (AC-03.1–3) | ✅ |
+| TC-S3-I07 | Blank add-rows store nothing (AC-03.4) | ✅ |
+| TC-S3-I08 | Blocked validation persists nothing; errors rendered per field (AC-04.8) | ✅ |
+| TC-S3-I09 | Totals mismatch → warning shown, save allowed (AC-04.7) | ✅ |
+| TC-S3-I10 | `1080.5` stored quantized (AC-04.2) | ✅ |
+| TC-S3-I11 | **Injected repository failure mid-transaction → full rollback** (header + lines unchanged) (AC-05.1) | ✅ |
+| TC-S3-I12 | Double-submit of saved record rejected by status guard (AC-05.3) | ✅ |
+| TC-S3-I13 | `extraction_json` byte-identical after save (AC-05.4) | ✅ |
+| TC-S3-I14 | Duplicate vendor+number: warning, no record; confirm → saved (AC-06.1–3) | ✅ |
+| TC-S3-I15 | Different file, same vendor+number → still flagged | ✅ |
+| TC-S3-I16 | Different number → no duplicate warning | ✅ |
+| TC-S3-I17 | Success flash + `saved` status (US-S3-07) | ✅ |
+| TC-S3-I18 | Foreign Origin POST → 403; loopback Origin allowed (T-G) | ✅ |
+| TC-S3-I19 | Duplicate finder: case-insensitive, saved records only | ✅ |
+| TC-S3-I20 | Validation accepts real invoice_001 values without warnings | ✅ |
+
+### Regression & real invoices
+
+Sprint 0–2 suites: **all green** (smoke, upload gates, upload flow, parser,
+extraction). The only prior-test edits: upload-flow tests now land on the
+review page after the (changed) success redirect — assertions updated
+transparently. Parser untouched this sprint; five real invoices re-verified:
+**65/65 field checks, 23/23 line items, all five PASS.**
+
+### Issues found and fixed during Sprint 3
+
+| # | Issue | Fix |
+|---|---|---|
+| I-18 | Failed money validation left the raw string in the field → TypeError in consistency math | Set `None` on validation failure |
+| I-19 | Warnings invisible when save succeeded without the duplicate detour | Warnings flashed on the success path too |
+| I-20 | Origin check rejected `127.0.0.1` Origin when host was `localhost` | Loopback spellings treated as equivalent |
+| I-21 | Rollback test: `sqlite3.Connection` is immutable; raw connection lacked `Row` factory | Injection moved to the repository `_to_real` boundary; Row factory set in test |
+| I-22 | Test helper `_save` referenced but never defined | Added |
+| I-23 | **Disk-full event (C: 100%)** during Phase D killed test runs | Cleaned own temp artifacts; verified with `-p no:cacheprovider`; flagged for user action (external cause — not project data) |

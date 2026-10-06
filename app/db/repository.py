@@ -7,10 +7,20 @@ as REAL and handled as decimal.Decimal at service boundaries (M-3).
 import json
 import sqlite3
 from datetime import datetime, timezone
+from decimal import Decimal
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _to_real(value):
+    """Decimal → float for REAL storage; None passes through (M-3 boundary)."""
+    if value is None:
+        return None
+    if isinstance(value, Decimal):
+        return float(value)
+    return value
 
 
 def insert_invoice(
@@ -64,6 +74,100 @@ def list_recent(conn: sqlite3.Connection, limit: int = 10) -> list[sqlite3.Row]:
         "SELECT * FROM invoices ORDER BY id DESC LIMIT ?", (limit,)
     )
     return cursor.fetchall()
+
+
+def find_saved_duplicates(
+    conn: sqlite3.Connection,
+    vendor: str,
+    invoice_number: str,
+    exclude_id: int | None = None,
+) -> list[sqlite3.Row]:
+    """Saved records matching vendor + invoice number, case-insensitively
+    (US-S3-06). Drafts (uploaded/extracted/failed) never count as duplicates."""
+    sql = (
+        "SELECT * FROM invoices WHERE status = 'saved' "
+        "AND vendor = ? COLLATE NOCASE AND invoice_number = ? COLLATE NOCASE"
+    )
+    params: list = [vendor, invoice_number]
+    if exclude_id is not None:
+        sql += " AND id != ?"
+        params.append(exclude_id)
+    return conn.execute(sql + " ORDER BY id", params).fetchall()
+
+
+def save_invoice(
+    conn: sqlite3.Connection,
+    invoice_id: int,
+    *,
+    header: dict,
+    lines: list[dict],
+) -> None:
+    """Transition `extracted` → `saved` atomically (US-S3-05).
+
+    Writes the reviewed header columns and replaces the full line set in ONE
+    transaction. Any failure rolls everything back and re-raises — the record
+    is left exactly as it was (header and prior lines). Raises ValueError for
+    missing records or a status other than `extracted` (double-submit guard,
+    AC-05.3). `extraction_json` is intentionally untouched (AC-05.4).
+    """
+    record = get_invoice(conn, invoice_id)
+    if record is None:
+        raise ValueError(f"invoice {invoice_id} not found")
+    if record["status"] != "extracted":
+        raise ValueError(
+            f"invoice {invoice_id} is {record['status']!r}, not 'extracted'"
+        )
+    try:
+        conn.execute(
+            """
+            UPDATE invoices SET
+                vendor = ?, vendor_tax_id = ?, invoice_number = ?,
+                invoice_date = ?, due_date = ?, bill_to = ?, currency = ?,
+                subtotal = ?, discount = ?, tax = ?, tax_rate = ?, total = ?,
+                status = 'saved', updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                header.get("vendor"),
+                header.get("vendor_tax_id"),
+                header.get("invoice_number"),
+                header.get("invoice_date"),
+                header.get("due_date"),
+                header.get("bill_to"),
+                header.get("currency"),
+                _to_real(header.get("subtotal")),
+                _to_real(header.get("discount")),
+                _to_real(header.get("tax")),
+                _to_real(header.get("tax_rate")),
+                _to_real(header.get("total")),
+                _now(),
+                invoice_id,
+            ),
+        )
+        conn.execute(
+            "DELETE FROM invoice_lines WHERE invoice_id = ?", (invoice_id,)
+        )
+        for line in lines:
+            conn.execute(
+                """
+                INSERT INTO invoice_lines (
+                    invoice_id, line_number, description, quantity,
+                    unit_price, amount
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    invoice_id,
+                    line.get("line_number"),
+                    line.get("description"),
+                    _to_real(line.get("quantity")),
+                    _to_real(line.get("unit_price")),
+                    _to_real(line.get("amount")),
+                ),
+            )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
 
 
 def update_extraction(

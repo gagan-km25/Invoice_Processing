@@ -4,7 +4,9 @@ Local-only web application for uploading invoices, extracting their details,
 reviewing them, and storing them in a local database. Architecture and sprint
 plan: docs/03-plan.md.
 """
-from flask import Flask, flash, redirect, url_for
+from urllib.parse import urlsplit
+
+from flask import Flask, flash, redirect, request, url_for
 from werkzeug.exceptions import RequestEntityTooLarge
 
 from app.config import Config
@@ -24,9 +26,29 @@ def create_app(config_object=Config) -> Flask:
     # SQLite schema (idempotent — safe on every boot).
     init_db(app)
 
-    from app.routes import uploads
+    from app.routes import invoices, uploads
 
     app.register_blueprint(uploads.bp)
+    app.register_blueprint(invoices.bp)
+
+    @app.before_request
+    def reject_cross_site_posts():
+        """T-G: a malicious webpage in the same browser can post forms at
+        127.0.0.1 — reject any POST whose Origin host is not this host.
+        Loopback spellings (localhost / 127.0.0.1 / ::1) are equivalent here.
+        Non-browser clients (curl) omit Origin and are allowed; the app is
+        localhost-only regardless (NFR-1)."""
+        if request.method != "POST":
+            return None
+        origin = request.headers.get("Origin")
+        if not origin:
+            return None
+        origin_host = (urlsplit(origin).hostname or "").lower()
+        local_host = (urlsplit(f"//{request.host}").hostname or "").lower()
+        loopback = {"localhost", "127.0.0.1", "::1"}
+        if origin_host == local_host or (origin_host in loopback and local_host in loopback):
+            return None
+        return "Cross-origin POST rejected", 403
 
     @app.errorhandler(RequestEntityTooLarge)
     def too_large(_error):

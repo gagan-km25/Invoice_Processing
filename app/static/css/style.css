@@ -95,3 +95,59 @@ main { max-width: 60rem; margin: 0 auto; padding: 1.5rem; }
 .status-failed { border-color: var(--err); color: var(--err); }
 
 .empty-state { color: var(--muted); }
+
+/* Review form (Sprint 3) */
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.field label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.2rem; }
+.field input {
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 0.92rem;
+}
+.field-has-error input { border-color: var(--err); }
+.error-text { color: var(--err); font-size: 0.8rem; margin-top: 0.15rem; }
+
+.badge {
+  display: inline-block;
+  padding: 0 0.4rem;
+  border-radius: 8px;
+  font-size: 0.7rem;
+  border: 1px solid var(--line);
+  vertical-align: middle;
+}
+.badge-ambiguous { border-color: var(--warn); color: var(--warn); }
+.badge-missing { border-color: var(--muted); color: var(--muted); }
+
+.lines-table input {
+  width: 100%;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+.lines-table .cell-remove { text-align: center; }
+.col-desc { min-width: 16rem; }
+
+.warning-list { margin: 0; padding-left: 1.1rem; }
+.confirm-line { display: block; margin-top: 0.5rem; font-weight: 600; }
+
+.form-actions { margin-top: 1rem; display: flex; gap: 0.75rem; align-items: center; }
+.button-primary {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.5rem 1.3rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+.button-primary:hover { filter: brightness(1.1); }
+.button-link { color: var(--muted); }

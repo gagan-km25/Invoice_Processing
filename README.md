@@ -18,9 +18,9 @@ is in place, and smoke tests pass. Features arrive per the approved plan
 | Sprint | Feature | Status |
 |---|---|---|
 | 0 | Scaffold, DB schema, docs | ✅ Done |
-| 1 | Upload & store invoices | ⬜ |
-| 2 | Automatic field extraction | ⬜ |
-| 3 | Review & save to database | ⬜ |
+| 1 | Upload & store invoices | ✅ Done |
+| 2 | Automatic field extraction | ✅ Done |
+| 3 | Review & save to database | ✅ Done |
 | 4 | Browse, search, edit, delete | ⬜ |
 | 5 | Hardening & manual acceptance | ⬜ |
 | 6 | Full test pass & documentation | ⬜ |
@@ -48,6 +48,12 @@ venv\Scripts\python run.py
 Open **http://127.0.0.1:5000** in your browser. Stop the server with `Ctrl+C`.
 On first boot the app creates `data/invoices.db` (schema applied idempotently)
 and the `uploads/` folder — no manual setup steps.
+
+**Workflow:** upload a PDF → the app extracts the fields → the **review page**
+opens with everything pre-filled and flagged where the extractor was unsure →
+correct anything you like → **Save invoice** stores it (header + line items in
+one transaction). Saved records are marked `saved` on the home page; extracted
+records show a **Review** link if you navigate away first.
 
 ## Run Tests
 
@@ -90,6 +96,8 @@ Invoice-Extractor/
 | [docs/04-test-results.md](docs/04-test-results.md) | Test catalogue + recorded runs |
 | [docs/05-prompt-log.md](docs/05-prompt-log.md) | Log of prompts used during development |
 | [docs/06-development-log.md](docs/06-development-log.md) | Dated build journal |
+| [docs/07-invoice-exploration.md](docs/07-invoice-exploration.md) | Real-invoice exploration + parser design |
+| [docs/08-sprint3-design.md](docs/08-sprint3-design.md) | Sprint 3 review/save design |
 
 ## Important Notes
 

@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Review invoice #{{ invoice['id'] }}{% endblock %}
+
+{% macro header_field(name, label, type='text') %}
+<div class="field {% if errors.get(name) %}field-has-error{% endif %}">
+  <label for="{{ name }}">{{ label }}
+    {% if flags.get(name) == 'ambiguous' %}<span class="badge badge-ambiguous">ambiguous</span>
+    {% elif flags.get(name) == 'missing' %}<span class="badge badge-missing">not found</span>{% endif %}
+  </label>
+  {% if type == 'date' %}
+  <input type="date" id="{{ name }}" name="{{ name }}" value="{{ values.get(name, '') }}">
+  {% else %}
+  <input type="text" id="{{ name }}" name="{{ name }}" value="{{ values.get(name, '') }}"
+         {% if name in ('subtotal', 'discount', 'tax', 'total', 'tax_rate') %}inputmode="decimal"{% endif %}>
+  {% endif %}
+  {% if errors.get(name) %}<div class="error-text">{{ errors[name] }}</div>{% endif %}
+</div>
+{% endmacro %}
+
+{% block content %}
+<section class="panel">
+  <h2>Review invoice <span class="status status-{{ invoice['status'] }}">{{ invoice['status'] }}</span></h2>
+  <p class="hint">Source file: {{ invoice['original_filename'] }} ·
+     Extracted {{ invoice['page_count'] }} page(s) ·
+     Correct the values below, then save.</p>
+
+  {% if errors %}
+  <div class="flash flash-error">
+    <strong>The invoice could not be saved — please fix the highlighted fields.</strong>
+  </div>
+  {% endif %}
+
+  {% if dup_ids %}
+  <div class="flash flash-error">
+    <strong>Possible duplicate:</strong> saved record(s) #{{ dup_ids|join(', #') }}
+    match this vendor / invoice number or file.
+    <label class="confirm-line">
+      <input type="checkbox" name="confirm_duplicate" value="1" form="review-form">
+      Save anyway — this is not a duplicate.
+    </label>
+  </div>
+  {% endif %}
+
+  {% if warnings %}
+  <div class="flash flash-warning">
+    <ul class="warning-list">
+      {% for warning in warnings %}<li>{{ warning }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <form id="review-form" action="{{ url_for('invoices.save', invoice_id=invoice['id']) }}"
+        method="post" class="review-form">
+    <h3>Invoice details</h3>
+    <div class="field-grid">
+      {{ header_field('vendor', 'Vendor') }}
+      {{ header_field('vendor_tax_id', 'Tax ID (GSTIN/VAT)') }}
+      {{ header_field('invoice_number', 'Invoice number *') }}
+      {{ header_field('invoice_date', 'Invoice date *', 'date') }}
+      {{ header_field('due_date', 'Due date', 'date') }}
+      {{ header_field('currency', 'Currency (e.g. INR)') }}
+      {{ header_field('bill_to', 'Bill to') }}
+      {{ header_field('subtotal', 'Subtotal *') }}
+      {{ header_field('discount', 'Discount') }}
+      {{ header_field('tax', 'Tax amount') }}
+      {{ header_field('tax_rate', 'Tax rate (%)') }}
+      {{ header_field('total', 'Total *') }}
+    </div>
+
+    <h3>Line items</h3>
+    <p class="hint">Untick a row to remove it. Blank rows are ignored on save.</p>
+    <table class="invoice-table lines-table">
+      <thead>
+        <tr>
+          <th>Remove</th><th class="col-desc">Description</th>
+          <th>Quantity</th><th>Unit price</th><th>Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in line_rows %}
+        <tr>
+          <td class="cell-remove">
+            <input type="checkbox" name="remove_{{ row['i'] }}"
+                   {% if row['remove'] %}checked{% endif %}>
+          </td>
+          <td class="col-desc">
+            <input name="description_{{ row['i'] }}" value="{{ row['description'] }}">
+            {% if errors.get('description_' ~ row['i']) %}<div class="error-text">{{ errors['description_' ~ row['i']] }}</div>{% endif %}
+          </td>
+          <td>
+            <input name="quantity_{{ row['i'] }}" inputmode="decimal" value="{{ row['quantity'] }}">
+            {% if errors.get('quantity_' ~ row['i']) %}<div class="error-text">{{ errors['quantity_' ~ row['i']] }}</div>{% endif %}
+          </td>
+          <td>
+            <input name="unit_price_{{ row['i'] }}" inputmode="decimal" value="{{ row['unit_price'] }}">
+            {% if errors.get('unit_price_' ~ row['i']) %}<div class="error-text">{{ errors['unit_price_' ~ row['i']] }}</div>{% endif %}
+          </td>
+          <td>
+            <input name="amount_{{ row['i'] }}" inputmode="decimal" value="{{ row['amount'] }}">
+            {% if errors.get('amount_' ~ row['i']) %}<div class="error-text">{{ errors['amount_' ~ row['i']] }}</div>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="form-actions">
+      <button type="submit" class="button-primary">Save invoice</button>
+      <a href="{{ url_for('uploads.index') }}" class="button-link">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

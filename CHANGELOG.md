@@ -3,6 +3,31 @@
 All notable changes to the Invoice Extractor are documented here.
 The project follows the sprint plan in [docs/03-plan.md](docs/03-plan.md).
 
+## 0.4.0 — Sprint 3: Review, Edit & Atomic Save (2026-10-06)
+
+- Review page (`/invoices/<id>/review`): every extracted field pre-filled and
+  editable, with ambiguity/missing flags from the extraction draft; usable
+  without JavaScript (remove checkboxes + always-present blank rows for
+  adding line items).
+- Server-side validation: required fields (number, date, subtotal, total),
+  decimal quantization to 2 dp, strict YYYY-MM-DD dates, quantity > 0,
+  unit price ≥ 0, 3-letter currency; consistency and plausibility problems
+  (due < invoice date, line amount ≠ qty × unit, subtotal−discount+tax ≠
+  total) produce visible warnings without blocking (E-16).
+- Atomic save: header + full line set in one SQLite transaction
+  (`extracted → saved`), rollback verified by an injected mid-transaction
+  failure test; `extraction_json` preserved untouched as the pre-review
+  audit record.
+- Duplicate confirmation at save time: matching saved records by
+  vendor + invoice number (case-insensitive) or file hash require an explicit
+  checkbox before a second record is created.
+- Security: Origin/Host check rejects cross-site POSTs with 403 (T-G).
+- Upload success now redirects into review; home page offers Review links for
+  extracted records.
+- Tests: 40 new cases (TC-S3-*) — suite 128/128; five real invoices
+  re-verified (65/65 fields, 23/23 line items).
+
+
 ## 0.3.0 — Sprint 2: Invoice Extraction & Parser (2026-10-06)
 
 - Real-invoice exploration before implementation (docs/07): five sample PDFs

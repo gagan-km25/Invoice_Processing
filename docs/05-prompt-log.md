@@ -101,3 +101,47 @@ prompt: phase, intent summary, artifacts produced, course-corrections caused.
 - **Artifacts:** docs/07-invoice-exploration.md (findings + design + plan),
   app/services/parser/* , services/extraction.py, upload→extract wiring,
   test suite growth, docs/04 sprint 2 results, CHANGELOG.
+
+## P-07 — Sprint 3 kickoff (planning phase) · 2026-10-06
+- **Prompt intent:** Start Sprint 3 (review/edit → validate → save → SQLite)
+  following the SDLC process — no immediate implementation code. Phase 1:
+  review docs 01–07 and git history; add this prompt + sprint start to logs.
+  Phase 2: define the seven given user stories (review, edit fields, edit/add/
+  remove line items, validation messages, atomic save, duplicate confirmation,
+  success message) without inventing major features. Phase 3: measurable
+  acceptance criteria covering required fields, decimal/date/quantity/line-
+  amount validation, consistency, duplicate handling, transaction rollback,
+  persistence, user-visible errors, save confirmation. Phase 4: explore the
+  existing schema/extraction flow (reusable columns, needed changes,
+  invoice_lines sufficiency, extraction_json handling, status transitions,
+  duplicate detection, review-route placement, layering) — no code changes.
+  Phase 5: concise design (route flow, review page, form, server-side
+  validation, line handling, duplicate confirmation, transaction boundaries,
+  repository methods, success/error handling, security, test strategy) plus
+  exact files to create/modify. Phase 6: scope control — no history/search,
+  detail pages, delete, dashboards, OCR, auth, deployment, UI redesign.
+  Report stories/AC/findings/architecture/files/tests/risks + explicit
+  no-implementation confirmation; STOP for approval before coding.
+- **Artifacts:** docs/08-sprint3-design.md; log updates.
+- **Note:** User also approved Sprint 2 verification and the Sprint 2 commit
+  at the start of this prompt cycle (commit `0a0f5cb`, single commit, tree
+  clean) after the transient mid-Sprint-2 failure state was resolved and the
+  premature commit was soft-reset per instruction.
+
+## P-08 — Sprint 3 implementation · 2026-10-06
+- **Prompt intent:** Design approved — implement Sprint 3 exactly per
+  [08-sprint3-design.md](08-sprint3-design.md). Process requirements: no
+  architecture redesign, no Sprint 4 features, layered routes → services →
+  repository, parser untouched, `extraction_json` unchanged by save,
+  `extracted → saved` transition, atomic header+lines transaction with
+  rollback tested via injected repository failure, save-time duplicate
+  detection with explicit confirmation, Origin/Host protection on POSTs,
+  server-side validation authoritative, review page usable without JS,
+  Sprint 0–2 functionality preserved. Test IDs TC-S3-*; regression required;
+  five real invoices not to be modified; docs 04/05/06/08 + CHANGELOG +
+  README updated honestly at the end. **No commit** — stop after
+  verification and wait for approval.
+- **Artifacts:** routes/invoices.py, services/review.py, templates/review.html,
+  repository save_invoice/find_saved_duplicates, Origin check, upload redirect
+  + index Review link, review styles, unit + integration test suites, docs
+  updates.

@@ -143,3 +143,47 @@ double-wrap) plus one refactor NameError the suite caught (I-8…I-17 in
 docs/04). **Scope kept:** no review UI, no save workflow, no management
 features — Sprint 3. Samples remain git-ignored (verified). Commit: see git
 log `sprint-2`.
+
+**Sprint 3 — Review & save (started; planning phase).**
+Sprint 2 approved and committed as `0a0f5cb` (single commit, clean tree,
+88/0/0 suite). P-07 logged. This sprint extends the flow to
+upload → validate → extract → **review/edit → validate → save → SQLite**.
+Planning only at this stage: seven user stories with measurable acceptance
+criteria, exploration of the current schema/extraction flow, and the
+implementation design captured in [08-sprint3-design.md](08-sprint3-design.md).
+Key planning outcomes: no schema changes required (Sprint 2 migration already
+provides every column); `saved` status and duplicate confirmation were
+designed in Sprint 0/1 and get implemented now; extraction_json is preserved
+untouched on save as the pre-review audit record; new files are
+routes/invoices.py, services/review.py, templates/review.html; T-G Origin
+check on POSTs lands in this sprint. Scope exclusions restated (no
+history/search, detail pages, delete, dashboards, OCR, auth, deployment).
+Implementation awaits user approval of the design.
+
+**Sprint 3 — Review & save (implementation started).**
+Design approved verbatim; P-08 logged. Build order: review validation service
+(pure) → repository save/find_saved_duplicates with transaction + rollback →
+invoices blueprint (review/save routes, 404 + status guards) → app factory
+(blueprint + Origin/Host check, closing decision T-G) → review template
+(no-JS line editor: remove checkboxes + 3 always-present blank rows) → upload
+redirect → index Review link → tests (TC-S3-*). Known test-impact to handle:
+Sprint 2 upload tests now land on the review page after the redirect —
+expectations updated transparently, not weakened. No commit until verified
+and approved.
+
+**Sprint 3 — Review & save (implementation complete; not committed).**
+Implemented exactly per the approved [08-sprint3-design.md](08-sprint3-design.md):
+`services/review.py` (pure validation/merge, reusing parser normalize
+functions), `repository.save_invoice` (extracted→saved guard, one transaction,
+rollback-on-failure) + `find_saved_duplicates`, `routes/invoices.py`
+(review/save with 404 + status guards), T-G Origin/Host check in the factory,
+`templates/review.html` (no-JS line editor: remove checkboxes + 3 blank add
+rows), upload success redirect → review, home-page Review links. **Tests:** 40
+new cases (TC-S3-U01–U20, TC-S3-I01–I20) including the injected-failure
+rollback proof; suite **128 passed / 0 failed / 0 skipped**; Sprint 0–2
+regression green; parser untouched — five real invoices re-verified 65/65
+fields, 23/23 lines. **Issues:** six logged (I-18…I-23), including a
+disk-full environment event (C: 100%, external cause) that interrupted test
+runs and was worked around by cleaning own temp files; user should free disk
+space. **extraction_json** verified byte-identical after save. Not committed —
+awaiting approval per process.

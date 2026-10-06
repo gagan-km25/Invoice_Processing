@@ -51,11 +51,13 @@ def upload():
             "warning",
         )
 
-    # Sprint 2: extraction runs synchronously in-request (plan §4 steps 8–10);
-    # review/edit UI arrives in Sprint 3.
+    # Sprint 2: extraction runs synchronously in-request (plan §4 steps 8–10).
+    # Sprint 3: successful extraction leads straight into review.
     ok, message = extract_invoice(invoice["id"])
     if ok:
         flash(f"Extraction complete (record #{invoice['id']}): {message}.", "success")
-    else:
-        flash(f"Extraction failed (record #{invoice['id']}): {message}.", "error")
+        return redirect(
+            url_for("invoices.review", invoice_id=invoice["id"])
+        )
+    flash(f"Extraction failed (record #{invoice['id']}): {message}.", "error")
     return redirect(url_for("uploads.index"))
