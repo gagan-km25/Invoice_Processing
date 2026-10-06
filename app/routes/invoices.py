@@ -8,20 +8,26 @@ import json
 from flask import (
     Blueprint,
     abort,
+    current_app,
     flash,
     redirect,
     render_template,
     request,
+    send_from_directory,
     url_for,
 )
 
 from app.db import get_db
 from app.db.repository import (
+    count_saved,
     find_by_hash,
     find_saved_duplicates,
     get_invoice,
+    get_lines,
+    list_saved,
     save_invoice,
 )
+from app.services.invoices import delete_saved_invoice
 from app.services.review import (
     form_to_view,
     prefill_from_draft,
@@ -30,6 +36,8 @@ from app.services.review import (
 )
 
 bp = Blueprint("invoices", __name__)
+
+PAGE_SIZE = 50  # minimal pagination, docs/09 §4
 
 
 def _flags_of(record) -> dict:
@@ -159,4 +167,97 @@ def save(invoice_id: int):
     for warning in result["warnings"]:
         flash(warning, "warning")
     flash(f"Invoice #{invoice_id} saved.", "success")
+    return redirect(url_for("uploads.index"))
+
+
+# ------------------------------------------------------- Sprint 4: history
+
+@bp.get("/invoices")
+def history():
+    """Saved invoices only, newest first, optional search, minimal paging."""
+    q = (request.args.get("q") or "").strip()
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except ValueError:
+        page = 1
+    conn = get_db()
+    try:
+        rows = list_saved(conn, q=q or None, limit=PAGE_SIZE,
+                          offset=(page - 1) * PAGE_SIZE)
+        total = count_saved(conn, q=q or None)
+    finally:
+        conn.close()
+    return render_template(
+        "history.html",
+        rows=rows,
+        q=q,
+        total=total,
+        page=page,
+        pages=max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE),
+    )
+
+
+@bp.get("/invoices/<int:invoice_id>")
+def detail(invoice_id: int):
+    record = _load(invoice_id)
+    if record is None:
+        abort(404)
+    if record["status"] != "saved":
+        flash(
+            f"Record #{invoice_id} is {record['status']} — details are "
+            "available for saved invoices.",
+            "warning",
+        )
+        return redirect(url_for("uploads.index"))
+    conn = get_db()
+    try:
+        lines = get_lines(conn, invoice_id)
+    finally:
+        conn.close()
+    return render_template("detail.html", invoice=record, lines=lines)
+
+
+@bp.get("/invoices/<int:invoice_id>/original")
+def original(invoice_id: int):
+    """Serve the stored source file. The stored name is server-generated and
+    send_from_directory refuses paths escaping the uploads directory."""
+    record = _load(invoice_id)
+    if record is None:
+        abort(404)
+    return send_from_directory(
+        current_app.config["UPLOAD_DIR"],
+        record["stored_filename"],
+        mimetype="application/pdf",
+    )
+
+
+@bp.post("/invoices/<int:invoice_id>/delete")
+def delete(invoice_id: int):
+    """POST-only, confirmation-required deletion of saved invoices.
+    GET requests never reach this route (405) and never delete."""
+    record = _load(invoice_id)
+    if record is None:
+        abort(404)
+    if record["status"] != "saved":
+        flash(
+            f"Record #{invoice_id} is {record['status']} — only saved "
+            "invoices can be deleted.",
+            "warning",
+        )
+        return redirect(url_for("uploads.index"))
+
+    if not request.form.get("confirm_delete"):
+        conn = get_db()
+        try:
+            lines = get_lines(conn, invoice_id)
+        finally:
+            conn.close()
+        return render_template(
+            "confirm_delete.html", invoice=record, lines=lines
+        )
+
+    ok, message = delete_saved_invoice(invoice_id)
+    flash(message, "success" if ok else "error")
+    if ok:
+        return redirect(url_for("invoices.history"))
     return redirect(url_for("uploads.index"))

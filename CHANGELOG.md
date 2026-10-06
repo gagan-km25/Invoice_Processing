@@ -3,6 +3,26 @@
 All notable changes to the Invoice Extractor are documented here.
 The project follows the sprint plan in [docs/03-plan.md](docs/03-plan.md).
 
+## 0.5.0 — Sprint 4: History, Search, Details & Delete (2026-10-06)
+
+- Invoice history page (`/invoices`): saved invoices only, newest first
+  (invoice date desc, id tiebreak), summary columns, minimal pagination
+  (50/page, Older/Newer links), distinct empty states.
+- Search: single box across invoice number and vendor — case-insensitive,
+  fragment-based, `%`/`_` treated as literal characters (escaped parameterized
+  LIKE), SQL-injection-safe.
+- Detail page (`/invoices/<id>`): complete saved header, all line items,
+  "View original" link serving the stored PDF (contained within `uploads/`).
+- Delete: POST-only with a required confirmation step; saved-only guard;
+  line items cascade (zero-orphan verified); stored file removed with
+  missing-file tolerance; success/error messages throughout.
+- Header navigation (Upload / History); home page links saved rows to their
+  detail page.
+- Edit-after-save remains deferred to a later sprint (see docs/09 §8).
+- Tests: 36 new cases (TC-S4-*) — suite 164/164; five real invoices
+  re-verified (65/65 fields, 23/23 line items).
+
+
 ## 0.4.0 — Sprint 3: Review, Edit & Atomic Save (2026-10-06)
 
 - Review page (`/invoices/<id>/review`): every extracted field pre-filled and

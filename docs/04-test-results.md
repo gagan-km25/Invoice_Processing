@@ -298,3 +298,72 @@ transparently. Parser untouched this sprint; five real invoices re-verified:
 | I-21 | Rollback test: `sqlite3.Connection` is immutable; raw connection lacked `Row` factory | Injection moved to the repository `_to_real` boundary; Row factory set in test |
 | I-22 | Test helper `_save` referenced but never defined | Added |
 | I-23 | **Disk-full event (C: 100%)** during Phase D killed test runs | Cleaned own temp artifacts; verified with `-p no:cacheprovider`; flagged for user action (external cause — not project data) |
+
+---
+
+## Sprint 4 — History, Search, Details & Delete · 2026-10-06
+
+**Suite result: 164 passed, 0 failed, 0 skipped** in ~20 s (36 new cases;
+Sprint 0–3 regression all green). Design: [09-sprint4-design.md](09-sprint4-design.md).
+
+### Unit — repository (`tests/unit/test_history_repository.py`)
+
+| ID | Scenario | Verdict |
+|---|---|---|
+| TC-S4-U01 | list_saved returns only `saved` rows; drafts excluded | ✅ |
+| TC-S4-U02 | Ordering: invoice_date desc, id desc tiebreak | ✅ |
+| TC-S4-U03 | Number fragment search (`inv-00` → `INV-0042`) | ✅ |
+| TC-S4-U04 | Vendor fragment search (`technova`) | ✅ |
+| TC-S4-U05 | Case-insensitivity (covered by U03/U04 combined match) | ✅ |
+| TC-S4-U06 | `%`/`_` treated as literals (escaped LIKE) | ✅ |
+| TC-S4-U07 | No match → empty list | ✅ |
+| TC-S4-U08 | count_saved consistent with list_saved, with/without q | ✅ |
+| TC-S4-U09 | limit/offset paging windows correct (5 rows, page size 2) | ✅ |
+| TC-S4-U10 | get_lines ordered by line_number | ✅ |
+| TC-S4-U11 | delete removes row; lines cascade to zero; zero orphans | ✅ |
+| TC-S4-U12 | delete guard: non-saved → ValueError, nothing changed | ✅ |
+| TC-S4-U13 | Deleting one invoice leaves others + their lines intact | ✅ |
+
+### Integration — history/detail/delete over HTTP (`tests/integration/test_history_delete_flow.py`)
+
+| ID | Scenario | Verdict |
+|---|---|---|
+| TC-S4-I01 | History lists 3 saved invoices; a draft is excluded | ✅ |
+| TC-S4-I01b | Exact ordering across three dates | ✅ |
+| TC-S4-I02 | Summary columns render (number, vendor, date, total, status) | ✅ |
+| TC-S4-I03 | Empty-history state with upload link (AC-01.3) | ✅ |
+| TC-S4-I04 | Number search, case-insensitive (AC-03.1–3) | ✅ |
+| TC-S4-I05 | Vendor search, case-insensitive | ✅ |
+| TC-S4-I06 | No-match search state distinct from empty history (AC-03.5) | ✅ |
+| TC-S4-I07 | `%` literal — wildcard would match everything, result is empty (AC-03.6) | ✅ |
+| TC-S4-I07b | `_` literal — `A_B` does not match `ACX` | ✅ |
+| TC-S4-I18 | `'; DROP TABLE invoices; --` inert; table intact (AC-R2) | ✅ |
+| TC-S4-I21 | Page count shown ("page 1 of 1"); no paging links when unneeded | ✅ |
+| TC-S4-I08 | Detail: complete header + View original (AC-04.1–3) | ✅ |
+| TC-S4-I09 | Detail 404 unknown; non-saved → redirect (AC-04.4) | ✅ |
+| TC-S4-I10 | History ↔ detail links (AC-04.5) | ✅ |
+| TC-S4-I20 | Original serving: contained, `%PDF-` content | ✅ |
+| TC-S4-I11 | Unconfirmed delete → confirmation page, nothing deleted (AC-05.2) | ✅ |
+| TC-S4-I12 | Confirmed delete → success flash, gone from DB/history (AC-05.3) | ✅ |
+| TC-S4-I13 | Cascade on real invoice (3 lines → 0); zero orphans (AC-06.1) | ✅ |
+| TC-S4-I14 | Stored PDF removed; missing file tolerated with message (AC-06.2) | ✅ |
+| TC-S4-I15 | Other invoices + lines untouched (AC-06.3) | ✅ |
+| TC-S4-I16 | `GET /invoices/<id>/delete` → 405, nothing deleted (AC-05.4) | ✅ |
+| TC-S4-I17 | Cross-site Origin delete → 403 (AC-05.5) | ✅ |
+| TC-S4-I22 | Deleting an extracted (unsaved) draft refused (guard) | ✅ |
+| TC-S4-I19 | Sprint 3 regression: upload → review → save flow intact (AC-R1) | ✅ |
+
+### Regression & real invoices
+
+Sprint 0–3 suites all green (128 prior + 36 new = 164). Parser untouched;
+five real invoices re-verified after implementation: **65/65 field checks,
+23/23 line items, all five PASS.**
+
+### Issues found and fixed during Sprint 4
+
+| # | Issue | Fix |
+|---|---|---|
+| I-24 | Missing `get_invoice` import in the repository test file | Added |
+| I-25 | Cascade test deleted an **extracted** (not saved) record — guard correctly refused | Test now saves first, matching the approved guard |
+| I-26 | `_upload_and_save` returns an id; regression test misused it as a response | Test rewritten against persisted state |
+| I-27 | Test-file hygiene: stray placeholder constant, late import, contradictory assertion | Cleaned |

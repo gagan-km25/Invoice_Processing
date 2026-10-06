@@ -28,6 +28,8 @@
         <td>
           {% if invoice['status'] == 'extracted' %}
           <a href="{{ url_for('invoices.review', invoice_id=invoice['id']) }}">Review</a>
+          {% elif invoice['status'] == 'saved' %}
+          <a href="{{ url_for('invoices.detail', invoice_id=invoice['id']) }}">Details</a>
           {% endif %}
         </td>
       </tr>

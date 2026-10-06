@@ -145,3 +145,41 @@ prompt: phase, intent summary, artifacts produced, course-corrections caused.
   repository save_invoice/find_saved_duplicates, Origin check, upload redirect
   + index Review link, review styles, unit + integration test suites, docs
   updates.
+
+## P-09 — Sprint 4 kickoff (planning phase) · 2026-10-06
+- **Prompt intent:** Planning ONLY — no application code. Sprint 4 extends the
+  flow with invoice history, search, details, and delete for **saved**
+  invoices. Phases: review docs 01–08 + implementation + git history (confirm
+  `b44d6d4`); define the seven given user stories (history, summary columns,
+  search by number/vendor, detail view, delete after confirmation, safe line
+  removal, empty/success/error messages); measurable ACs covering saved-only
+  filtering, ordering, case-insensitive search, 404s, POST-only deletion,
+  cascade line removal, SQL-injection safety, Origin protection, regression.
+  Explore: existing repository methods, needed additions, schema sufficiency,
+  CASCADE reliability, saved-status filtering, search implementation,
+  pagination necessity, route placement, layering. Design: history/search/
+  detail/delete routes, repository methods, transaction behavior, delete
+  confirmation, security, empty states, test strategy (TC-S4-*). **Scope
+  exclusions include edit-after-save — report any conflict with existing
+  requirements instead of silently expanding scope.** Docs: P-09, dev log,
+  docs/09-sprint4-design.md. STOP for approval before implementing.
+- **Artifacts:** docs/09-sprint4-design.md; log updates.
+
+## P-10 — Sprint 4 implementation · 2026-10-06
+- **Prompt intent:** Design approved (edit-after-save stays deferred).
+  Implement exactly per [09-sprint4-design.md](09-sprint4-design.md): history
+  (saved-only, newest-first, minimal pagination 50/page), search
+  (parameterized, case-insensitive, number + vendor, `%`/`_` literal,
+  injection-safe), detail view (all header fields + line items), contained
+  original-file serving, POST-only delete with explicit confirmation and
+  saved-only guard, cascade line removal verified orphan-free, stored-file
+  removal with missing-file tolerance, empty/success/error states. Layering
+  routes → services → repository; existing invoices blueprint; only the four
+  approved repository methods plus `services/invoices.py`; parser and Sprint 3
+  review service untouched; Sprint 3 Origin protection preserved. Tests
+  TC-S4-U01…/TC-S4-I01… per docs/09 §6 plus full regression. Docs updated
+  honestly at the end. **No commit** — stop after verification.
+- **Artifacts:** repository list_saved/count_saved/get_lines/delete_invoice,
+  services/invoices.py, history/detail/confirm_delete templates, original
+  serving route, delete flow, unit + integration suites, docs 04/06/09,
+  CHANGELOG, README.

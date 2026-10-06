@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Invoice {{ invoice['invoice_number'] }}{% endblock %}
+{% block content %}
+<section class="panel">
+  <h2>Invoice {{ invoice['invoice_number'] }}
+    <span class="status status-{{ invoice['status'] }}">{{ invoice['status'] }}</span>
+  </h2>
+  <p class="hint">Source file: {{ invoice['original_filename'] }} ·
+     <a href="{{ url_for('invoices.original', invoice_id=invoice['id']) }}">View original</a></p>
+
+  <dl class="detail-grid">
+    <dt>Vendor</dt><dd>{{ invoice['vendor'] or "—" }}</dd>
+    <dt>Tax ID</dt><dd>{{ invoice['vendor_tax_id'] or "—" }}</dd>
+    <dt>Invoice number</dt><dd>{{ invoice['invoice_number'] or "—" }}</dd>
+    <dt>Invoice date</dt><dd>{{ invoice['invoice_date'] or "—" }}</dd>
+    <dt>Due date</dt><dd>{{ invoice['due_date'] or "—" }}</dd>
+    <dt>Bill to</dt><dd>{{ invoice['bill_to'] or "—" }}</dd>
+    <dt>Currency</dt><dd>{{ invoice['currency'] or "—" }}</dd>
+    <dt>Subtotal</dt><dd>{{ invoice['subtotal'] if invoice['subtotal'] is not none else "—" }}</dd>
+    <dt>Discount</dt><dd>{{ invoice['discount'] if invoice['discount'] is not none else "—" }}</dd>
+    <dt>Tax rate (%)</dt><dd>{{ invoice['tax_rate'] if invoice['tax_rate'] is not none else "—" }}</dd>
+    <dt>Tax</dt><dd>{{ invoice['tax'] if invoice['tax'] is not none else "—" }}</dd>
+    <dt>Total</dt><dd class="detail-total">{{ invoice['total'] if invoice['total'] is not none else "—" }}</dd>
+  </dl>
+</section>
+
+<section class="panel">
+  <h2>Line items</h2>
+  {% if lines %}
+  <table class="invoice-table">
+    <thead>
+      <tr><th>#</th><th>Description</th><th>Quantity</th><th>Unit price</th><th>Amount</th></tr>
+    </thead>
+    <tbody>
+      {% for line in lines %}
+      <tr>
+        <td>{{ line['line_number'] }}</td>
+        <td>{{ line['description'] }}</td>
+        <td>{{ line['quantity'] }}</td>
+        <td>{{ line['unit_price'] }}</td>
+        <td>{{ line['amount'] }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty-state">This invoice has no line items.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Actions</h2>
+  <form method="post" action="{{ url_for('invoices.delete', invoice_id=invoice['id']) }}" class="inline-form">
+    <button type="submit" class="button-danger">Delete this invoice…</button>
+  </form>
+  <p><a href="{{ url_for('invoices.history') }}">← Back to history</a></p>
+</section>
+{% endblock %}

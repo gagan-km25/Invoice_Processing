@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Delete invoice #{{ invoice['id'] }}?{% endblock %}
+{% block content %}
+<section class="panel">
+  <h2>Delete invoice #{{ invoice['id'] }}?</h2>
+  <div class="flash flash-error">
+    <strong>This cannot be undone.</strong> The invoice record, its
+    {{ lines|length }} line item{{ '' if lines|length == 1 else 's' }}, and the
+    stored source file will all be removed.
+  </div>
+
+  <dl class="detail-grid">
+    <dt>Vendor</dt><dd>{{ invoice['vendor'] or "—" }}</dd>
+    <dt>Invoice number</dt><dd>{{ invoice['invoice_number'] or "—" }}</dd>
+    <dt>Invoice date</dt><dd>{{ invoice['invoice_date'] or "—" }}</dd>
+    <dt>Total</dt><dd>{{ invoice['total'] if invoice['total'] is not none else "—" }}</dd>
+  </dl>
+
+  <form method="post" action="{{ url_for('invoices.delete', invoice_id=invoice['id']) }}">
+    <label class="confirm-line">
+      <input type="checkbox" name="confirm_delete" value="1" required>
+      Yes — permanently delete this invoice.
+    </label>
+    <div class="form-actions">
+      <button type="submit" class="button-danger">Delete permanently</button>
+      <a href="{{ url_for('invoices.detail', invoice_id=invoice['id']) }}" class="button-link">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

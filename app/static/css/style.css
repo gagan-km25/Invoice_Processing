@@ -151,3 +151,50 @@ main { max-width: 60rem; margin: 0 auto; padding: 1.5rem; }
 }
 .button-primary:hover { filter: brightness(1.1); }
 .button-link { color: var(--muted); }
+
+/* History / detail / delete (Sprint 4) */
+.site-nav { margin-top: 0.5rem; display: flex; gap: 1rem; }
+.site-nav a { color: var(--accent); text-decoration: none; font-size: 0.92rem; }
+.site-nav a:hover { text-decoration: underline; }
+
+.search-form { display: flex; gap: 0.6rem; margin-bottom: 1rem; }
+.search-form input {
+  flex: 1;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 0.92rem;
+}
+.search-form button {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.4rem 1rem;
+  cursor: pointer;
+}
+
+.pager { margin-top: 0.75rem; display: flex; gap: 1rem; }
+.pager a { color: var(--accent); text-decoration: none; }
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 10rem 1fr;
+  gap: 0.3rem 1rem;
+  margin: 0 0 1rem;
+}
+.detail-grid dt { color: var(--muted); font-size: 0.88rem; }
+.detail-grid dd { margin: 0; font-size: 0.95rem; }
+.detail-total { font-weight: 700; }
+
+.inline-form { display: inline; }
+.button-danger {
+  background: var(--panel);
+  color: var(--err);
+  border: 1px solid var(--err);
+  border-radius: 6px;
+  padding: 0.3rem 0.8rem;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+.button-danger:hover { background: var(--err); color: #fff; }

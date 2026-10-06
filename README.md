@@ -21,7 +21,7 @@ is in place, and smoke tests pass. Features arrive per the approved plan
 | 1 | Upload & store invoices | ✅ Done |
 | 2 | Automatic field extraction | ✅ Done |
 | 3 | Review & save to database | ✅ Done |
-| 4 | Browse, search, edit, delete | ⬜ |
+| 4 | History, search, details & delete | ✅ Done |
 | 5 | Hardening & manual acceptance | ⬜ |
 | 6 | Full test pass & documentation | ⬜ |
 | X | OCR (gated — see plan, T-I) | ⬜ |
@@ -52,8 +52,9 @@ and the `uploads/` folder — no manual setup steps.
 **Workflow:** upload a PDF → the app extracts the fields → the **review page**
 opens with everything pre-filled and flagged where the extractor was unsure →
 correct anything you like → **Save invoice** stores it (header + line items in
-one transaction). Saved records are marked `saved` on the home page; extracted
-records show a **Review** link if you navigate away first.
+one transaction). Use **History** to browse, search, open, or delete saved
+invoices — deleting asks for confirmation and removes the record, its line
+items, and the stored file.
 
 ## Run Tests
 
@@ -98,6 +99,7 @@ Invoice-Extractor/
 | [docs/06-development-log.md](docs/06-development-log.md) | Dated build journal |
 | [docs/07-invoice-exploration.md](docs/07-invoice-exploration.md) | Real-invoice exploration + parser design |
 | [docs/08-sprint3-design.md](docs/08-sprint3-design.md) | Sprint 3 review/save design |
+| [docs/09-sprint4-design.md](docs/09-sprint4-design.md) | Sprint 4 history/search/detail/delete design |
 
 ## Important Notes
 

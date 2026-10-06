@@ -187,3 +187,46 @@ disk-full environment event (C: 100%, external cause) that interrupted test
 runs and was worked around by cleaning own temp files; user should free disk
 space. **extraction_json** verified byte-identical after save. Not committed —
 awaiting approval per process.
+
+**Sprint 4 — Invoice history, search, details & delete (started; planning
+phase).** Sprint 3 committed as `b44d6d4` (128/0/0). P-09 logged. Planning
+only: seven user stories with measurable ACs, exploration of the current
+repository/schema for history/search/detail/delete, and the design in
+[09-sprint4-design.md](09-sprint4-design.md). Headline exploration results:
+**no schema changes needed** (saved-only filtering, LIKE search with escaped
+wildcards, CASCADE + FK-pragma handle line removal); **pagination kept
+minimal** (page size 50, offset + count — justified by NFR-10 capacity, not
+full pagination UI); delete is POST-only with a confirmation step and removes
+the stored file too ("delete means delete", D-007/FR-13). **Scope conflict
+reported, not silently resolved:** docs/03-plan.md placed edit-after-save
+(US-8/FR-11, Should) in Sprint 4, but this sprint's instructions exclude it —
+deferred to a later sprint per the user's explicit exclusion, documented in
+docs/09 §8. Implementation awaits design approval.
+
+**Sprint 4 — History, search, details & delete (implementation started).**
+Design approved with the edit-after-save deferral upheld. Build order:
+repository four (list_saved/count_saved/get_lines/delete_invoice — escaped
+parameterized LIKE, saved-only predicate, date-desc/id-desc ordering) →
+`services/invoices.py` delete orchestration (DB commit first, best-effort
+file unlink, missing-file tolerance) → invoices blueprint routes (history,
+detail, original serving, POST-only delete with confirmation render) →
+templates (history with search + paging, detail, confirm_delete with required
+checkbox — native HTML5, no JS) → base nav + index Details links → tests
+(TC-S4-*, ~33 planned). No commit until verified and approved.
+
+**Sprint 4 — History, search, details & delete (implementation complete; not
+committed).** Implemented per the approved docs/09: repository four
+(`list_saved` with escaped-LIKE search + paging, `count_saved`, `get_lines`,
+`delete_invoice` with saved-only guard), `services/invoices.py`
+(delete orchestration: committed DB delete → best-effort stored-file removal,
+missing-file tolerance), four routes on the existing invoices blueprint
+(history with search box + Older/Newer paging, detail with full header + lines
++ View original, POST-only delete with required-checkbox confirmation page,
+contained original serving), header nav (Upload/History), home-page Details
+links. **Tests:** 36 new cases (TC-S4-U01–U13, TC-S4-I01–I22 incl. paging,
+injection, 405, Origin 403, cascade/orphan checks); suite **164 passed /
+0 failed / 0 skipped**; Sprint 0–3 regression green; parser untouched — five
+real invoices re-verified 65/65. **Issues:** I-24…I-27 (test-side import,
+guard, and helper misuse — all fixed; no implementation defects required
+changes beyond none). Edit-after-save deferral upheld: no edit routes exist.
+Not committed — awaiting approval.

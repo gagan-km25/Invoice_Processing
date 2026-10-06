@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Invoice history{% endblock %}
+{% block content %}
+<section class="panel">
+  <h2>Saved invoices</h2>
+
+  <form method="get" action="{{ url_for('invoices.history') }}" class="search-form">
+    <input type="text" name="q" value="{{ q }}" placeholder="Search invoice number or vendor…">
+    <button type="submit">Search</button>
+    {% if q %}<a href="{{ url_for('invoices.history') }}" class="button-link">Clear</a>{% endif %}
+  </form>
+
+  {% if rows %}
+  <p class="hint">{{ total }} invoice{{ '' if total == 1 else 's' }}
+     {%- if q %} matching “{{ q }}”{% endif -%}
+     · page {{ page }} of {{ pages }}</p>
+  <table class="invoice-table">
+    <thead>
+      <tr><th>Invoice no.</th><th>Vendor</th><th>Date</th><th>Total</th><th>Status</th><th></th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for invoice in rows %}
+      <tr>
+        <td><a href="{{ url_for('invoices.detail', invoice_id=invoice['id']) }}">{{ invoice['invoice_number'] }}</a></td>
+        <td>{{ invoice['vendor'] }}</td>
+        <td>{{ invoice['invoice_date'] }}</td>
+        <td>{{ invoice['total'] }}</td>
+        <td><span class="status status-{{ invoice['status'] }}">{{ invoice['status'] }}</span></td>
+        <td><a href="{{ url_for('invoices.detail', invoice_id=invoice['id']) }}">Details</a></td>
+        <td>
+          <form method="post" action="{{ url_for('invoices.delete', invoice_id=invoice['id']) }}" class="inline-form">
+            <button type="submit" class="button-danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="pager">
+    {% if page > 1 %}
+    <a href="{{ url_for('invoices.history', q=q or none, page=page - 1) }}">← Newer</a>
+    {% endif %}
+    {% if page < pages %}
+    <a href="{{ url_for('invoices.history', q=q or none, page=page + 1) }}">Older →</a>
+    {% endif %}
+  </div>
+
+  {% elif q %}
+  <p class="empty-state">No invoices match “{{ q }}”. <a href="{{ url_for('invoices.history') }}">Clear the search</a> to see all saved invoices.</p>
+  {% else %}
+  <p class="empty-state">No saved invoices yet. <a href="{{ url_for('uploads.index') }}">Upload an invoice</a> to get started.</p>
+  {% endif %}
+</section>
+{% endblock %}

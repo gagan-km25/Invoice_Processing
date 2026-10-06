@@ -95,6 +95,67 @@ def find_saved_duplicates(
     return conn.execute(sql + " ORDER BY id", params).fetchall()
 
 
+def _search_filter(q: str | None) -> tuple[str, list]:
+    """Optional search fragment for history: substring match on invoice number
+    or vendor, case-insensitive, user %/_ treated as literal characters
+    (escaped, declared via ESCAPE — TC-S4-U06/I18)."""
+    if not q:
+        return "", []
+    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    pattern = f"%{escaped}%"
+    return (
+        " AND (invoice_number LIKE ? ESCAPE '\\' OR vendor LIKE ? ESCAPE '\\')",
+        [pattern, pattern],
+    )
+
+
+def list_saved(
+    conn: sqlite3.Connection,
+    q: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[sqlite3.Row]:
+    """Saved invoices for the history page: newest invoice date first (id as
+    tiebreak), optional search, minimal pagination (docs/09 §4)."""
+    fragment, params = _search_filter(q)
+    sql = (
+        f"SELECT * FROM invoices WHERE status = 'saved'{fragment} "
+        "ORDER BY invoice_date DESC, id DESC LIMIT ? OFFSET ?"
+    )
+    return conn.execute(sql, [*params, limit, offset]).fetchall()
+
+
+def count_saved(conn: sqlite3.Connection, q: str | None = None) -> int:
+    """Total saved invoices matching the same filter as list_saved."""
+    fragment, params = _search_filter(q)
+    return conn.execute(
+        f"SELECT COUNT(*) FROM invoices WHERE status = 'saved'{fragment}", params
+    ).fetchone()[0]
+
+
+def get_lines(conn: sqlite3.Connection, invoice_id: int) -> list[sqlite3.Row]:
+    """Line items of one invoice, in line-number order."""
+    return conn.execute(
+        "SELECT * FROM invoice_lines WHERE invoice_id = ? ORDER BY line_number",
+        (invoice_id,),
+    ).fetchall()
+
+
+def delete_invoice(conn: sqlite3.Connection, invoice_id: int) -> None:
+    """Delete a saved invoice; line items are removed by the FK cascade
+    (PRAGMA foreign_keys = ON is set by get_db). Guard: only `saved` records
+    may be deleted here (US-S4-05/06)."""
+    record = get_invoice(conn, invoice_id)
+    if record is None:
+        raise ValueError(f"invoice {invoice_id} not found")
+    if record["status"] != "saved":
+        raise ValueError(
+            f"invoice {invoice_id} is {record['status']!r}, not 'saved'"
+        )
+    conn.execute("DELETE FROM invoices WHERE id = ?", (invoice_id,))
+    conn.commit()
+
+
 def save_invoice(
     conn: sqlite3.Connection,
     invoice_id: int,

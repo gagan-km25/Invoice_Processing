@@ -10,6 +10,10 @@
   <header class="site-header">
     <h1>Invoice Extractor</h1>
     <p class="tagline">local-only · your invoices never leave this machine</p>
+    <nav class="site-nav">
+      <a href="{{ url_for('uploads.index') }}">Upload</a>
+      <a href="{{ url_for('invoices.history') }}">History</a>
+    </nav>
   </header>
   <main>
     {% with messages = get_flashed_messages(with_categories=true) %}
