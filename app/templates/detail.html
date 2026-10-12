@@ -1,10 +1,18 @@
 {% extends "base.html" %}
-{% block title %}Invoice {{ invoice['invoice_number'] }}{% endblock %}
+{% block title %}Invoice {{ invoice['invoice_number'] or invoice['id'] }}{% endblock %}
 {% block content %}
-<section class="panel">
-  <h2>Invoice {{ invoice['invoice_number'] }}
+<section class="panel"
+         {% if invoice['status'] in ('uploaded', 'processing') %}data-status-poll="{{ url_for('invoices.status', invoice_id=invoice['id']) }}" data-poll-seconds="{{ config['WORKER_POLL_SECONDS'] }}"{% endif %}>
+  <h2>Invoice {{ invoice['invoice_number'] or "#" ~ invoice['id'] }}
     <span class="status status-{{ invoice['status'] }}">{{ invoice['status'] }}</span>
   </h2>
+  {% if invoice['status'] in ('uploaded', 'processing') %}
+  <p class="hint">Processing continues in the background — this page refreshes
+     automatically when processing finishes.</p>
+  {% endif %}
+  {% if invoice['status'] == 'failed' %}
+  <p class="flash flash-error">Processing failed: {{ invoice['error_message'] or "the reason could not be recorded." }}</p>
+  {% endif %}
   <p class="hint">Source file: {{ invoice['original_filename'] }} ·
      <a href="{{ url_for('invoices.original', invoice_id=invoice['id']) }}">View original</a></p>
 
@@ -50,9 +58,20 @@
 
 <section class="panel">
   <h2>Actions</h2>
+  {% if invoice['status'] in ('extracted', 'completed') %}
+  <p><a class="button" href="{{ url_for('invoices.review', invoice_id=invoice['id']) }}">Review &amp; save</a></p>
+  {% endif %}
+  {% if invoice['status'] == 'failed' %}
+  <form method="post" action="{{ url_for('invoices.reprocess', invoice_id=invoice['id']) }}" class="inline-form">
+    <button type="submit">Reprocess this invoice</button>
+  </form>
+  {% endif %}
+  {% if invoice['status'] == 'saved' %}
   <form method="post" action="{{ url_for('invoices.delete', invoice_id=invoice['id']) }}" class="inline-form">
     <button type="submit" class="button-danger">Delete this invoice…</button>
   </form>
-  <p><a href="{{ url_for('invoices.history') }}">← Back to history</a></p>
+  {% endif %}
+  <p><a href="{{ url_for('invoices.history') }}">← Back to history</a> ·
+     <a href="{{ url_for('uploads.index') }}">Back to upload</a></p>
 </section>
 {% endblock %}

@@ -16,7 +16,9 @@ from app.config import Config
 
 
 def _test_config(tmp_path):
-    """Real config with all paths redirected into tmp_path."""
+    """Real config with all paths redirected into tmp_path. The worker runs
+    in manual mode (no thread): tests drive it deterministically via
+    `worker.run_pending()`."""
     base = {name: getattr(Config, name) for name in dir(Config) if name.isupper()}
     base.update(
         TESTING=True,
@@ -25,7 +27,10 @@ def _test_config(tmp_path):
         DATA_DIR=tmp_path / "data",
         UPLOAD_DIR=tmp_path / "uploads",
         SAMPLE_DIR=tmp_path / "samples",
+        LOG_DIR=tmp_path / "data" / "logs",
         DATABASE=tmp_path / "data" / "invoices.db",
+        WORKER_AUTOSTART=False,
+        WORKER_RETRY_BACKOFF_SECONDS=0,
     )
     return SimpleNamespace(**base)
 
@@ -148,6 +153,14 @@ def app_context(app):
     """Push an app context so services using current_app work in unit tests."""
     with app.app_context():
         yield app
+
+
+@pytest.fixture()
+def worker(app):
+    """The app's invoice worker in manual mode (WORKER_AUTOSTART=False):
+    tests call `worker.run_pending()` to drain the queue deterministically,
+    or `worker.process_job(id, kind)` for claim-ladder cases."""
+    return app.extensions["invoice_worker"]
 
 
 @pytest.fixture()

@@ -1,7 +1,12 @@
-"""Invoice review & save routes (Sprint 3). Thin HTTP layer:
-validation/merge lives in services/review.py, the transaction in the
-repository. Guards: 404 for unknown ids; only `extracted` records can be
-reviewed or saved; duplicates require explicit confirmation (US-S3-06).
+"""Invoice review, save, history, detail, and lifecycle routes (Sprint 3;
+async lifecycle since Sprint E1). Thin HTTP layer: validation/merge lives
+in services/review.py, the transaction in the repository, transitions in
+services/workflow.py via the pipeline.
+
+Guards: 404 for unknown ids; review/save accept `extracted` (legacy rows)
+or `completed` (pipeline output); only `saved` records can be deleted;
+duplicates require explicit confirmation (US-S3-06); reprocess is offered
+for `failed` records (and `validation_failed` once Sprint E3 adds it).
 """
 import json
 
@@ -10,6 +15,7 @@ from flask import (
     abort,
     current_app,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -28,12 +34,15 @@ from app.db.repository import (
     save_invoice,
 )
 from app.services.invoices import delete_saved_invoice
+from app.services.pipeline import JOB_REPROCESS
 from app.services.review import (
     form_to_view,
     prefill_from_draft,
     validate_and_merge,
     with_blank_rows,
 )
+
+REVIEWABLE = ("extracted", "completed")
 
 bp = Blueprint("invoices", __name__)
 
@@ -75,15 +84,51 @@ def _saved_hash_duplicates(record) -> list:
     return duplicates
 
 
+@bp.get("/invoices/<int:invoice_id>/status")
+def status(invoice_id: int):
+    """JSON processing status (Sprint E1) — used by the detail page poll."""
+    record = _load(invoice_id)
+    if record is None:
+        abort(404)
+    return jsonify(
+        {
+            "id": record["id"],
+            "status": record["status"],
+            "updated_at": record["updated_at"],
+        }
+    )
+
+
+@bp.post("/invoices/<int:invoice_id>/reprocess")
+def reprocess(invoice_id: int):
+    """Re-run the pipeline for a failed (or, from Sprint E3,
+    validation-failed) invoice. The route only guards + enqueues; the
+    worker's claim ladder performs T5/T5b and audits `reprocess_requested`
+    in the same transaction as the status change."""
+    record = _load(invoice_id)
+    if record is None:
+        abort(404)
+    if record["status"] not in ("failed", "validation_failed"):
+        flash(
+            f"Record #{invoice_id} is {record['status']} — only failed "
+            "invoices can be reprocessed.",
+            "warning",
+        )
+        return redirect(url_for("invoices.detail", invoice_id=invoice_id))
+    current_app.extensions["invoice_worker"].enqueue(invoice_id, JOB_REPROCESS)
+    flash(f"Reprocessing record #{invoice_id}.", "info")
+    return redirect(url_for("invoices.detail", invoice_id=invoice_id))
+
+
 @bp.get("/invoices/<int:invoice_id>/review")
 def review(invoice_id: int):
     record = _load(invoice_id)
     if record is None:
         abort(404)
-    if record["status"] != "extracted":
+    if record["status"] not in REVIEWABLE:
         flash(
             f"Record #{invoice_id} is {record['status']} — only extracted "
-            "records can be reviewed.",
+            "or completed invoices can be reviewed.",
             "warning",
         )
         return redirect(url_for("uploads.index"))
@@ -105,7 +150,7 @@ def save(invoice_id: int):
     record = _load(invoice_id)
     if record is None:
         abort(404)
-    if record["status"] != "extracted":
+    if record["status"] not in REVIEWABLE:
         flash(
             f"Record #{invoice_id} is {record['status']} and cannot be saved "
             "again.",
@@ -200,16 +245,11 @@ def history():
 
 @bp.get("/invoices/<int:invoice_id>")
 def detail(invoice_id: int):
+    """Invoice detail — available for every status since Sprint E1 (the
+    upload redirect lands here so processing progress is visible)."""
     record = _load(invoice_id)
     if record is None:
         abort(404)
-    if record["status"] != "saved":
-        flash(
-            f"Record #{invoice_id} is {record['status']} — details are "
-            "available for saved invoices.",
-            "warning",
-        )
-        return redirect(url_for("uploads.index"))
     conn = get_db()
     try:
         lines = get_lines(conn, invoice_id)

@@ -13,10 +13,10 @@ recorded test run or manual check.
 |---|---|---|---|
 | FR-E1 | Vendor/approver roles with the route map in ARCHITECTURE.md §6 (§3) | Must | Planned (E4) |
 | FR-E2 | Upload accepts PDF, JPG, PNG; validates type, size, empty files; size limit stays centralised (§4) | Must | Planned (E2) |
-| FR-E3 | Upload returns before extraction completes (§4) | Must | Planned (E1) |
+| FR-E3 | Upload returns before extraction completes (§4) | Must | **Done** (E1: TC-ASYNC-01) |
 | FR-E4 | Unique invoice ID + appropriate initial status on upload (§4) | Must | **Done** (v1 baseline) |
-| FR-E5 | Background processing with statuses Uploaded/Processing/Completed/Failed (+ Pending Approval, Validation Failed, Approved, Rejected per §12) (§5) | Must | Planned (E1) |
-| FR-E6 | Graceful extraction-failure handling + retry for retryable failures (§5) | Must | Planned (E1) |
+| FR-E5 | Background processing with statuses Uploaded/Processing/Completed/Failed (+ Pending Approval, Validation Failed, Approved, Rejected per §12) (§5) | Must | **Done** (E1: serial in-process worker; approval statuses arrive E4) |
+| FR-E6 | Graceful extraction-failure handling + retry for retryable failures (§5) | Must | **Done** (E1: TC-PIPE-FAIL-01..06) |
 | FR-E7 | Extraction of all §6 fields: invoice number/date, due date, vendor, GSTIN, currency, PO number, subtotal, tax, total; bill-to/ship-to names + addresses; line items with description, quantity, unit price, tax, line total (§6) | Must | Planned (E2/E3) |
 | FR-E8 | Structured storage + retention of the raw AI response for traceability (§6) | Must | Planned (E2) |
 | FR-E9 | AI response validation before use: missing fields, invalid JSON, wrong types, invalid dates/numbers; malformed responses never crash and land in a failure state with a recorded error (§7) | Must | Planned (E2) |
@@ -28,10 +28,10 @@ recorded test run or manual check.
 | FR-E15 | Duplicate detection: exact (vendor + invoice number) and possible (vendor + amount + date), classified No/Possible/Exact with an explanation, never a bare true/false (§9) | Must | Planned (E3) |
 | FR-E16 | Approval routing: < ₹1,00,000 → manager; ≥ ₹1,00,000 → finance; implemented exactly once (§10) | Must | Planned (E4) |
 | FR-E17 | Approve/reject actions; rejection reason mandatory; invalid transitions prevented (§11) | Must | Planned (E4) |
-| FR-E18 | Controlled status lifecycle with documented transitions (§12) | Must | **Done** (machine, E0); **UI/pipeline wiring Planned** (E1/E4/E5) |
-| FR-E19 | Audit history of §13 events with what/which invoice/when/who; visible on the detail screen (§13) | Must | **Done** (table + service, E0); **event wiring Planned** (E1+) |
-| FR-E20 | Invoice list (ID, number, vendor, date, amount, status, created) + detail (info, extraction, lines, validation, duplicates, approval, audit); status filter (§14) | Must | Planned (E5) |
-| FR-E21 | Meaningful error handling for the §15 catalogue; no stack traces or sensitive data to users; errors logged (§15) | Must | Planned (E1–E6) |
+| FR-E18 | Controlled status lifecycle with documented transitions (§12) | Must | **Done** (machine E0 + pipeline wiring E1); approval transitions arrive E4, review submit E3/E5 |
+| FR-E19 | Audit history of §13 events with what/which invoice/when/who; visible on the detail screen (§13) | Must | **Done** (table+service E0; lifecycle events wired E1); **timeline UI Planned** (E5) |
+| FR-E20 | Invoice list (ID, number, vendor, date, amount, status, created) + detail (info, extraction, lines, validation, duplicates, approval, audit); status filter (§14) | Must | Planned (E5) — detail available for all statuses since E1 |
+| FR-E21 | Meaningful error handling for the §15 catalogue; no stack traces or sensitive data to users; errors logged (§15) | Must | Partial — **Done for pipeline/logging (E1)**; remaining catalogue cases arrive with E2/E3 features |
 
 ## 2. Non-functional requirements
 
@@ -42,8 +42,8 @@ recorded test run or manual check.
 | NFR-E3 | No unnecessary complexity: no broker, no ORM, no new front-end stack (§17) | **Done** (E0) / continuous |
 | NFR-E4 | Secrets: API key via environment only; never committed, logged, or returned to users (§17/§22) | **Done** (E0 plumbing + TC-CFG/TC-KEY tests) |
 | NFR-E5 | Data privacy: invoice content leaves the machine only during GLM extraction, disclosed in README/KNOWN_ISSUES (§15) | Planned (E2 disclosure) |
-| NFR-E6 | Logging: structured allowlist events; tracebacks only in the errors log of sanitised exceptions (§15) | Planned (E1) |
-| NFR-E7 | Migration safety: live DB never migrated before a recorded copy rehearsal; timestamped backup before any live migration | **Done** (E0: copy rehearsal PASS, recorded in TEST_PLAN.md) |
+| NFR-E6 | Logging: structured allowlist events; tracebacks only in the errors log of sanitised exceptions (§15) | **Done** (E1: applog allowlist enforced structurally; TC-LOG-01b, TC-ERR-500-01) |
+| NFR-E7 | Migration safety: live DB never migrated before a recorded copy rehearsal; timestamped backup before any live migration | **Breached 2026-10-12 (E1 incident R-E1-8): an in-process boot migrated the live DB without authorization; restoration drafted, awaiting user decision. Rehearsal itself had passed (R-E0-4)** |
 | NFR-E8 | Tests run against temporary databases only (baseline NFR-8) | **Done** (unchanged) |
 
 ## 3. Assumptions (recorded, per approved plan)

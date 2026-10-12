@@ -11,7 +11,7 @@ import pytest
 from werkzeug.datastructures import FileStorage
 
 from app.db import get_db
-from app.services.extraction import extract_invoice
+from app.services.pipeline import JOB_NEW_UPLOAD
 from app.services.review import validate_and_merge
 from app.services.uploading import store_upload
 
@@ -31,13 +31,17 @@ SYNTHETIC = [
 
 
 def _upload(client, make_pdf, name="synthetic.pdf", text_lines=None):
+    """Upload + drive the worker to completion (the review flow needs a
+    reviewable record; since Sprint E1 extraction is asynchronous)."""
     _, pdf_bytes = make_pdf(name, pages=1, text_lines=text_lines or SYNTHETIC)
-    return client.post(
+    response = client.post(
         "/upload",
         data={"file": (io.BytesIO(pdf_bytes), name)},
         content_type="multipart/form-data",
         follow_redirects=True,
     )
+    client.application.extensions["invoice_worker"].run_pending()
+    return response
 
 
 def _rows(app, query="SELECT * FROM invoices ORDER BY id"):
@@ -88,24 +92,34 @@ def _extract_real_001(app):
             FileStorage(io.BytesIO(sample.read_bytes()),
                         filename=sample.name, content_type="application/pdf")
         )
-        extract_invoice(record["id"])
+        app.extensions["invoice_worker"].process_job(
+            record["id"], JOB_NEW_UPLOAD
+        )
         return record["id"]
 
 
 # ------------------------------------------------------- review page (US-S3-01)
 
 def test_review_renders_extracted_values(app, client, make_pdf):
-    """TC-S3-I01 — upload lands on review; extracted values pre-filled;
-    ambiguous/missing fields flagged; Review link on home page."""
+    """TC-S3-I01 — upload lands on the detail page (Sprint E1), which links
+    to review; the review page shows extracted values pre-filled with
+    ambiguous/missing fields flagged."""
     response = _upload(client, make_pdf)
     assert response.status_code == 200
-    assert b"Review invoice" in response.data
-    assert b"Acme Corporation" in response.data          # prefilled vendor
-    assert b"INV-TEST-0001" in response.data             # prefilled number
-    assert b"2026-01-15" in response.data                # prefilled date
-    assert b"1080.00" in response.data                   # prefilled total
-    assert b"not found" in response.data                 # missing-field flags
     invoice_id = _last_id(app)
+    # NOTE: the upload response rendered before the worker ran (status was
+    # still `uploaded`); fetch the detail page fresh to see the review link.
+    detail = client.get(f"/invoices/{invoice_id}")
+    assert f"/invoices/{invoice_id}/review".encode() in detail.data
+
+    review = client.get(f"/invoices/{invoice_id}/review")
+    assert review.status_code == 200
+    assert b"Review invoice" in review.data
+    assert b"Acme Corporation" in review.data            # prefilled vendor
+    assert b"INV-TEST-0001" in review.data               # prefilled number
+    assert b"2026-01-15" in review.data                  # prefilled date
+    assert b"1080.00" in review.data                     # prefilled total
+    assert b"not found" in review.data                   # missing-field flags
     home = client.get("/")
     assert f"/invoices/{invoice_id}/review".encode() in home.data
 
@@ -125,7 +139,7 @@ def test_review_non_extracted_redirects(app, client, make_pdf):
         conn.commit()
         conn.close()
     response = client.get(f"/invoices/{invoice_id}/review", follow_redirects=True)
-    assert b"only extracted records can be reviewed" in response.data
+    assert b"only extracted or completed invoices can be reviewed" in response.data
 
 
 # ------------------------------------------------- field editing (US-S3-02)
@@ -236,7 +250,7 @@ def test_invalid_submission_persists_nothing(app, client, make_pdf):
     assert b"YYYY-MM-DD" in response.data
     assert b"must be a number" in response.data
     row = _rows(app, f"SELECT * FROM invoices WHERE id = {invoice_id}")[0]
-    assert row["status"] == "extracted"  # nothing persisted
+    assert row["status"] == "completed"  # nothing persisted
     assert row["invoice_number"] == "INV-TEST-0001"  # original values intact
 
 
@@ -276,7 +290,7 @@ def test_rollback_on_injected_repository_failure(app, monkeypatch):
         app,
         f"SELECT * FROM invoice_lines WHERE invoice_id = {invoice_id} ORDER BY line_number",
     )
-    assert before_header["status"] == "extracted" and len(before_lines) == 3
+    assert before_header["status"] == "completed" and len(before_lines) == 3
 
     poison = object()  # sentinel no legitimate value can equal
     real_to_real = repository._to_real
@@ -311,7 +325,7 @@ def test_rollback_on_injected_repository_failure(app, monkeypatch):
         app,
         f"SELECT * FROM invoice_lines WHERE invoice_id = {invoice_id} ORDER BY line_number",
     )
-    assert after_header["status"] == "extracted"
+    assert after_header["status"] == "completed"
     assert after_header["vendor"] == "TechNova Retail Pvt. Ltd."
     assert after_header["invoice_number"] == "TN-2026-1001"
     assert len(after_lines) == 3
@@ -455,7 +469,9 @@ def test_validate_service_smoke_on_real_draft(app):
         record = store_upload(FileStorage(io.BytesIO(sample.read_bytes()),
                                           filename=sample.name,
                                           content_type="application/pdf"))
-        extract_invoice(record["id"])
+        app.extensions["invoice_worker"].process_job(
+            record["id"], JOB_NEW_UPLOAD
+        )
     form = {
         "vendor": "TechNova Retail Pvt. Ltd.", "vendor_tax_id": "29AABCT1234F1Z5",
         "invoice_number": "TN-2026-1001", "invoice_date": "2026-10-06",

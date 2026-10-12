@@ -1,12 +1,22 @@
-"""Extraction service: stored file → pdfplumber two-view → parser → database.
+"""Extraction service: stored file → pdfplumber two-view → parser → draft.
 
-Synchronous in-request execution (decision T-F): files are ≤10 MB with a
-50-page cap, so worst-case time is bounded. Failure semantics (US-2/NFR-4):
-any failure marks the record `failed` with a readable reason — the app never
-crashes on a bad file, and the record stays inspectable.
+Sprint E1 refactor: this module extracts and persists the *draft*; it does
+NOT change `invoices.status` — the pipeline (app/services/pipeline.py) owns
+every status transition through the workflow machine. Failure semantics:
+failures are raised as typed exceptions so the pipeline can distinguish
+retryable from permanent and record the terminal state exactly once.
+
+- `ExtractionRetryable`: transient conditions worth re-attempting (e.g. the
+  stored file temporarily unreadable — a OneDrive sync hiccup; from E2,
+  network/5xx/429 provider errors).
+- `ExtractionPermanent`: re-running cannot succeed (invalid/unreadable PDF,
+  no text layer / scan, parser poison).
+
+Both carry a `user_message`: a fixed, user-safe string (never exception
+text) suitable for `error_message` and flashes. The app never crashes on a
+bad file, and the record stays inspectable (US-2/NFR-4, unchanged).
 """
 import io
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pdfplumber
@@ -17,11 +27,30 @@ from app.db.repository import get_invoice, update_extraction
 from app.services import parser
 
 
-def extract_invoice(invoice_id: int) -> tuple[bool, str]:
-    """Run extraction for a stored upload.
+class ExtractionError(Exception):
+    """Base: extraction failed. `user_message` is always user-safe."""
 
-    Returns (ok, message): message summarizes the outcome either way, so the
-    route can flash it without knowing parser internals.
+    def __init__(self, user_message: str):
+        self.user_message = user_message
+        super().__init__(user_message)
+
+
+class ExtractionPermanent(ExtractionError):
+    """Re-running extraction cannot succeed."""
+
+
+class ExtractionRetryable(ExtractionError):
+    """Transient condition — a bounded retry may succeed."""
+
+
+def extract_stored_invoice(invoice_id: int) -> tuple[bool, str]:
+    """Run extraction for a stored upload and persist the draft.
+
+    Status policy: this function never writes `invoices.status`. On success
+    the draft + line items are persisted (`update_extraction`) and
+    (True, summary) is returned; on failure an ExtractionRetryable /
+    ExtractionPermanent is raised and the pipeline performs the terminal
+    transition with `user_message`.
     """
     conn = get_db()
     try:
@@ -29,16 +58,18 @@ def extract_invoice(invoice_id: int) -> tuple[bool, str]:
     finally:
         conn.close()
     if record is None:
-        return False, f"record #{invoice_id} not found"
+        raise ExtractionPermanent(f"Record #{invoice_id} could not be found.")
     if record["status"] == "failed" and not record["stored_filename"]:
-        return False, record["error_message"] or "previous failure"
+        raise ExtractionPermanent(record["error_message"] or "previous failure")
 
     file_path = Path(current_app.config["UPLOAD_DIR"]) / record["stored_filename"]
     try:
         data = file_path.read_bytes()
-    except OSError as exc:
-        _mark_failed(invoice_id, f"stored file could not be read: {exc}")
-        return False, "stored file could not be read"
+    except OSError:
+        # Transient in practice (e.g. OneDrive sync lock) — bounded retry.
+        raise ExtractionRetryable(
+            "The stored file could not be read right now."
+        ) from None
 
     try:
         with pdfplumber.open(io.BytesIO(data)) as pdf:
@@ -54,23 +85,27 @@ def extract_invoice(invoice_id: int) -> tuple[bool, str]:
         # selectable text is almost certainly a scan. Fail with the specific
         # message instead of silently producing an all-missing extraction.
         if len(text.strip()) < 20:
-            reason = (
+            raise ExtractionPermanent(
                 "The PDF contains no selectable text — it is likely a scan. "
                 "OCR is not available in this version; use a text-based PDF."
             )
-            _mark_failed(invoice_id, reason)
-            return False, reason
 
         draft = parser.parse(text, tables, page_count=page_count)
-    except Exception as exc:  # noqa: BLE001 — deliberate failure containment
-        _mark_failed(invoice_id, f"extraction error: {exc}")
-        return False, "the file could not be processed"
+    except ExtractionPermanent:
+        raise
+    except Exception:
+        # Contained: never crash, never leak exception text upward. The
+        # class name travels via the pipeline's structured log only.
+        raise ExtractionPermanent(
+            "The file could not be processed — it may be corrupt."
+        ) from None
 
     conn = get_db()
     try:
-        update_extraction(conn, invoice_id, draft=draft, status="extracted")
+        update_extraction(conn, invoice_id, draft=draft)  # status unchanged
     finally:
         conn.close()
+
     found = sum(
         1
         for field in draft["fields"].values()
@@ -81,17 +116,3 @@ def extract_invoice(invoice_id: int) -> tuple[bool, str]:
         f"{found} of {len(draft['fields'])} fields found, "
         f"{len(draft['lines'])} line items",
     )
-
-
-def _mark_failed(invoice_id: int, message: str) -> None:
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    conn = get_db()
-    try:
-        conn.execute(
-            "UPDATE invoices SET status = 'failed', error_message = ?, "
-            "updated_at = ? WHERE id = ?",
-            (message, now, invoice_id),
-        )
-        conn.commit()
-    finally:
-        conn.close()

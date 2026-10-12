@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from app.db import get_db
-from app.services.extraction import extract_invoice
+from app.services.pipeline import JOB_NEW_UPLOAD
 from app.services.review import validate_and_merge
 from app.services.uploading import store_upload
 
@@ -23,7 +23,8 @@ def _synthetic(vendor, number, date):
 
 
 def _upload_and_save(client, make_pdf, app, vendor, number, date, name):
-    """Upload a synthetic invoice and save it via the review flow. Returns id."""
+    """Upload a synthetic invoice and save it via the review flow. Returns id.
+    Since Sprint E1 the worker must run between upload and save."""
     _, pdf_bytes = make_pdf(name, pages=1, text_lines=_synthetic(vendor, number, date))
     client.post(
         "/upload",
@@ -31,6 +32,7 @@ def _upload_and_save(client, make_pdf, app, vendor, number, date, name):
         content_type="multipart/form-data",
         follow_redirects=True,
     )
+    client.application.extensions["invoice_worker"].run_pending()
     invoice_id = _rows(app)[-1]["id"]
     client.post(
         f"/invoices/{invoice_id}/save",
@@ -187,15 +189,24 @@ def test_detail_shows_everything(app, client, make_pdf):
         assert needle in body, needle
 
 
-def test_detail_unknown_and_nonsaved(app, client, make_pdf):
-    """TC-S4-I09 — unknown id → 404; non-saved → redirect (AC-04.4)."""
+def test_detail_unknown_and_nonsaved(app, client, worker, make_pdf):
+    """TC-S4-I09 — unknown id → 404; since Sprint E1 the detail page is
+    available for every status (processing progress is visible)."""
     assert client.get("/invoices/9999").status_code == 404
     _, pdf_bytes = make_pdf("draft.pdf", pages=1)
     client.post("/upload", data={"file": (io.BytesIO(pdf_bytes), "d.pdf")},
                 content_type="multipart/form-data", follow_redirects=True)
     draft_id = _rows(app)[-1]["id"]
-    response = client.get(f"/invoices/{draft_id}", follow_redirects=True)
-    assert b"details are available for saved invoices" in response.data
+
+    processing = client.get(f"/invoices/{draft_id}")
+    assert processing.status_code == 200
+    assert b"status-uploaded" in processing.data  # badge shows current status
+
+    worker.run_pending()
+    failed = client.get(f"/invoices/{draft_id}")  # blank PDF fails the scan gate
+    assert failed.status_code == 200
+    assert b"status-failed" in failed.data
+    assert b"likely a scan" in failed.data  # failure reason shown on detail
 
 
 def test_history_detail_links(app, client, make_pdf):
@@ -349,7 +360,7 @@ def test_sprint3_regression_review_save_still_works(app, client, make_pdf):
     assert row["invoice_number"] == "INV-1"
     review = client.get(f"/invoices/{invoice_id}/review", follow_redirects=True)
     assert review.status_code == 200
-    assert b"only extracted records can be reviewed" in review.data
+    assert b"only extracted or completed invoices can be reviewed" in review.data
 
 
 def _extract_real_001(app):
@@ -363,6 +374,8 @@ def _extract_real_001(app):
         record = store_upload(FileStorage(io.BytesIO(sample.read_bytes()),
                                           filename=sample.name,
                                           content_type="application/pdf"))
-        extract_invoice(record["id"])
+        app.extensions["invoice_worker"].process_job(
+            record["id"], JOB_NEW_UPLOAD
+        )
         return record["id"]
 

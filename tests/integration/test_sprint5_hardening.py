@@ -1,5 +1,6 @@
 """Sprint 5 tests — no-text-layer gate, error-path audit, invoice isolation.
-IDs TC-S5-* (catalogued in docs/04)."""
+IDs TC-S5-* (catalogued in docs/04). Updated for the Sprint E1 async
+pipeline: extraction runs via the worker, so tests drive it explicitly."""
 import io
 import sqlite3
 
@@ -7,7 +8,7 @@ from werkzeug.datastructures import FileStorage
 
 from app.db import get_db
 from app.db.repository import get_invoice
-from app.services.extraction import extract_invoice
+from app.services.pipeline import JOB_NEW_UPLOAD
 from app.services.uploading import store_upload
 
 NO_TEXT_SNIPPET = "no selectable text"
@@ -40,42 +41,45 @@ def _upload(client, make_pdf, name, text_lines=None, follow=True):
 
 # ------------------------------------------------- US-S5-01: no-text gate
 
-def test_no_text_pdf_fails_with_scan_message(app, make_pdf):
-    """TC-S5-U01 — valid PDF, no text: extraction fails with the specific
-    scan message; record is `failed` with that reason; nothing half-written."""
+def test_no_text_pdf_fails_with_scan_message(app, worker, make_pdf):
+    """TC-S5-U01 — valid PDF, no text: the pipeline fails the record with
+    the specific scan message; nothing half-written."""
     _, pdf_bytes = make_pdf("blank.pdf", pages=1)  # valid PDF, no text
     with app.app_context():
         record = store_upload(FileStorage(io.BytesIO(pdf_bytes),
                                           filename="blank.pdf"))
-        ok, message = extract_invoice(record["id"])
+        worker.process_job(record["id"], JOB_NEW_UPLOAD)
         row = get_invoice(get_db(), record["id"])
 
-    assert ok is False
-    assert NO_TEXT_SNIPPET in message
-    assert "likely a scan" in message
+    assert "likely a scan" in row["error_message"]
     assert row["status"] == "failed"
     assert NO_TEXT_SNIPPET in row["error_message"]
 
 
-def test_text_pdf_unaffected_by_gate(app, client, make_pdf):
+def test_text_pdf_unaffected_by_gate(app, client, worker, make_pdf):
     """TC-S5-U02 — text-bearing PDFs pass the gate unchanged (regression)."""
     response = _upload(client, make_pdf, "with-text.pdf", text_lines=SYNTHETIC_A)
-    assert b"Extraction complete" in response.data
-    assert NO_TEXT_SNIPPET.encode() not in response.data
+    assert b"Uploaded successfully" in response.data
+    worker.run_pending()
+    row = _rows(app)[-1]
+    assert row["status"] == "completed"
+    assert NO_TEXT_SNIPPET not in (row["error_message"] or "")
 
 
-def test_no_text_pdf_http_flow(app, client, make_pdf):
-    """TC-S5-I01 — HTTP upload of a no-text PDF: friendly flash, `failed`
-    status, review refused (non-extracted)."""
+def test_no_text_pdf_http_flow(app, client, worker, make_pdf):
+    """TC-S5-I01 — HTTP upload of a no-text PDF: terminal `failed` status,
+    review refused (non-reviewable)."""
     response = _upload(client, make_pdf, "blank.pdf")  # blank page: no text
-    assert b"likely a scan" in response.data
+    assert b"Uploaded successfully" in response.data
     invoice_id = _rows(app)[-1]["id"]
+    worker.run_pending()
+
     row = _rows(app, f"SELECT status, error_message FROM invoices WHERE id = {invoice_id}")[0]
     assert row["status"] == "failed"
     assert NO_TEXT_SNIPPET in row["error_message"]
 
     review = client.get(f"/invoices/{invoice_id}/review", follow_redirects=True)
-    assert b"only extracted records can be reviewed" in review.data
+    assert b"only extracted or completed invoices can be reviewed" in review.data
 
 
 def _rows(app, query="SELECT * FROM invoices ORDER BY id"):
@@ -129,13 +133,14 @@ def test_known_error_paths_never_500(app, client, make_pdf, monkeypatch):
 
 # ------------------------------------------------- US-S5-03: isolation
 
-def test_invoice_data_isolation(app, client, make_pdf):
+def test_invoice_data_isolation(app, client, worker, make_pdf):
     """TC-S5-I04/I05 — no invoice's values ever appear on another invoice's
     review, detail, or history pages (US-S5-03)."""
     _upload(client, make_pdf, "a.pdf", text_lines=SYNTHETIC_A)
     a_id = _rows(app)[-1]["id"]
     _upload(client, make_pdf, "b.pdf", text_lines=SYNTHETIC_B)
     b_id = _rows(app)[-1]["id"]
+    worker.run_pending()  # complete both pipelines before review/save
 
     a_markers = [b"Acme Corporation", b"INV-ISO-100", b"Springfield"]
     b_markers = [b"Beta Industries", b"INV-ISO-200", b"Shelbyville"]

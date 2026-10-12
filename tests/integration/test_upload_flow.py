@@ -9,9 +9,10 @@ import sqlite3
 from app.config import Config
 
 
-def test_valid_upload_round_trip(app, client, make_pdf):
-    """TC-S1-I01 — valid PDF: redirect, success flash, file + row stored,
-    record visible on the home page."""
+def test_valid_upload_round_trip(app, client, worker, make_pdf):
+    """TC-S1-I01 — valid PDF: redirect, success flash, file + row stored.
+    Since Sprint E1 the upload returns BEFORE processing; a text-less PDF
+    then fails asynchronously with the specific scan message."""
     _, pdf_bytes = make_pdf("sample.pdf", pages=1)
 
     response = client.post(
@@ -23,10 +24,6 @@ def test_valid_upload_round_trip(app, client, make_pdf):
 
     assert response.status_code == 200
     assert b"Uploaded successfully" in response.data
-    assert b"sample.pdf" in response.data  # listed in Recent uploads
-    # Sprint 5 no-text gate: a blank (text-less) PDF fails extraction with
-    # the specific scan message instead of an all-missing extraction
-    assert b"likely a scan" in response.data
 
     conn = sqlite3.connect(app.config["DATABASE"])
     conn.row_factory = sqlite3.Row
@@ -35,11 +32,20 @@ def test_valid_upload_round_trip(app, client, make_pdf):
     finally:
         conn.close()
     assert len(rows) == 1
-    assert rows[0]["status"] == "failed"  # no-text gate (Sprint 5)
-    assert "no selectable text" in rows[0]["error_message"]  # Sprint 2 wires extraction into upload
+    assert rows[0]["status"] == "uploaded"  # E1: response precedes processing
     stored = app.config["UPLOAD_DIR"] / rows[0]["stored_filename"]
     assert stored.exists()
     assert stored.read_bytes() == pdf_bytes  # byte-for-byte storage
+
+    worker.run_pending()  # blank PDF → permanent failure (Sprint 5 gate)
+    conn = sqlite3.connect(app.config["DATABASE"])
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute("SELECT * FROM invoices").fetchall()
+    finally:
+        conn.close()
+    assert rows[0]["status"] == "failed"  # no-text gate (Sprint 5)
+    assert "no selectable text" in rows[0]["error_message"]
 
 
 def test_missing_file_rejected_over_http(app, client, db_rows):
@@ -141,6 +147,9 @@ def test_duplicate_upload_warns(app, client, make_pdf, db_rows):
     rows = db_rows()
     assert len(rows) == 2
     assert rows[0]["file_hash"] == rows[1]["file_hash"]
+    # both jobs were queued and remain pending — dedupe is per invoice id,
+    # not per content (same hash, different ids)
+    assert app.extensions["invoice_worker"].queued_count() == 2
 
 
 def test_deleted_uploads_dir_recovered(app, client, make_pdf):

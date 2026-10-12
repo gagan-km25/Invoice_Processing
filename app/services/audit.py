@@ -16,6 +16,7 @@ EVENT_INVOICE_UPLOADED = "invoice_uploaded"
 EVENT_PROCESSING_STARTED = "processing_started"
 EVENT_PROCESSING_RESUMED = "processing_resumed"      # recovery job only
 EVENT_PROCESSING_COMPLETED = "processing_completed"
+EVENT_PROCESSING_FAILED = "processing_failed"        # terminal failure (T4)
 EVENT_REPROCESS_REQUESTED = "reprocess_requested"
 
 # Extraction
@@ -42,6 +43,7 @@ ALL_EVENTS = (
     EVENT_PROCESSING_STARTED,
     EVENT_PROCESSING_RESUMED,
     EVENT_PROCESSING_COMPLETED,
+    EVENT_PROCESSING_FAILED,
     EVENT_REPROCESS_REQUESTED,
     EVENT_EXTRACTION_COMPLETED,
     EVENT_EXTRACTION_FAILED,

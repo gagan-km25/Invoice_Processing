@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from werkzeug.datastructures import FileStorage
 
-from app.services.extraction import extract_invoice
+from app.services.pipeline import JOB_NEW_UPLOAD
 from app.services.uploading import store_upload
 
 SAMPLES = Path(__file__).resolve().parents[2] / "sample_invoices"
@@ -34,8 +34,9 @@ SYNTHETIC_INVOICE = [
 
 # ------------------------------------------------------------------ HTTP flow
 
-def test_upload_runs_extraction_and_persists(app, client, make_pdf):
-    """TC-S2-I01 — upload → extracted: columns, lines, draft JSON, flash."""
+def test_upload_runs_extraction_and_persists(app, client, worker, make_pdf):
+    """TC-S2-I01 — upload → pipeline → completed: columns, lines, draft
+    JSON (extraction result is now produced asynchronously)."""
     _, pdf_bytes = make_pdf("synthetic.pdf", pages=1, text_lines=SYNTHETIC_INVOICE)
     response = client.post(
         "/upload",
@@ -44,8 +45,9 @@ def test_upload_runs_extraction_and_persists(app, client, make_pdf):
         follow_redirects=True,
     )
     assert response.status_code == 200
-    assert b"Extraction complete" in response.data
-    assert b"extracted" in response.data  # status badge
+    assert b"Uploaded successfully" in response.data
+
+    worker.run_pending()
 
     conn = sqlite3.connect(app.config["DATABASE"])
     conn.row_factory = sqlite3.Row
@@ -56,7 +58,7 @@ def test_upload_runs_extraction_and_persists(app, client, make_pdf):
         ).fetchall()
     finally:
         conn.close()
-    assert row["status"] == "extracted"
+    assert row["status"] == "completed"  # pipeline terminal (Sprint E1)
     assert row["invoice_number"] == "INV-TEST-0001"
     assert row["invoice_date"] == "2026-01-15"
     assert row["vendor"] == "Acme Corporation"
@@ -70,20 +72,17 @@ def test_upload_runs_extraction_and_persists(app, client, make_pdf):
     assert lines == []  # synthetic invoice has no item table → zero lines (AC-2.3)
 
 
-def test_extraction_failure_marks_record_failed(app, client, make_pdf):
-    """TC-S2-I02 — a valid PDF whose extraction explodes → failed + reason."""
-    # A valid PDF (opens fine) that makes the parser raise is hard to craft;
-    # instead verify the service-level failure path with a vanished file:
+def test_extraction_failure_marks_record_failed(app, worker, make_pdf):
+    """TC-S2-I02 — a valid PDF whose stored file vanished → pipeline marks
+    the record failed with a user-safe reason."""
     _, pdf_bytes = make_pdf("ghost.pdf", pages=1)
     with app.app_context():
         record = store_upload(
             FileStorage(io.BytesIO(pdf_bytes), filename="ghost.pdf")
         )
         (app.config["UPLOAD_DIR"] / record["stored_filename"]).unlink()
-        ok, message = extract_invoice(record["id"],)
+        worker.process_job(record["id"], JOB_NEW_UPLOAD)
 
-        assert ok is False
-        assert "could not be read" in message
         conn = sqlite3.connect(app.config["DATABASE"])
         conn.row_factory = sqlite3.Row
         try:
@@ -100,7 +99,7 @@ def test_extraction_failure_marks_record_failed(app, client, make_pdf):
 
 def _expected(**overrides):
     base = {
-        "status": "extracted",
+        "status": "completed",  # pipeline terminal since Sprint E1
         "due_date": None,
         "currency": "INR",
         "currency_status": "ambiguous",
@@ -223,8 +222,9 @@ def _assert_exact(app, sample_name, expected):
         pytest.skip(f"sample not present: {sample_name}")
     with app.app_context():
         record = store_upload(_storage(sample))
-        ok, message = extract_invoice(record["id"],)
-        assert ok is True, message
+        app.extensions["invoice_worker"].process_job(
+            record["id"], JOB_NEW_UPLOAD
+        )
 
         conn = sqlite3.connect(app.config["DATABASE"])
         conn.row_factory = sqlite3.Row

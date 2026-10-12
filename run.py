@@ -13,4 +13,5 @@ if __name__ == "__main__":
         port=Config.PORT,
         debug=Config.DEBUG,
         use_reloader=Config.USE_RELOADER,
+        threaded=True,  # UI stays responsive while the worker processes jobs
     )

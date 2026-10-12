@@ -1,5 +1,13 @@
 # Invoice Extractor
 
+> **⚠ Enhancement in progress (2026-10-13).** This README still describes the
+> original v1 application. Sprint E1 of the enhancement assignment added
+> asynchronous background processing, a processing-status endpoint, bounded
+> retries with reprocess, structured logging, and the v2 database schema —
+> see [docs/SPRINT_PLAN.md](docs/SPRINT_PLAN.md) and
+> [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md). A full README rewrite is
+> planned for Sprint E6.
+
 A **local-only** web application for uploading invoices, automatically extracting
 their details, reviewing/correcting them, and storing them in a local database.
 Built as a complete, documented SDLC exercise: requirements → exploration →

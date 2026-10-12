@@ -7,8 +7,8 @@ strictly top-to-bottom.
 
 | Sprint | Goal | Stories | Expected outcome (measurable) |
 |---|---|---|---|
-| **E0** | Baseline, schema v2 migration, workflow/audit foundations, canonical docs | US-E0-1..5 | Branch exists; migration preserves IDs/values/timestamps/lines (TC-MIG-01..07, 09); copy rehearsal PASS recorded; transition + threshold tests green; full suite green; docs skeletons accurate |
-| **E1** | Asynchronous pipeline core on the existing local extractor | US-E1-1..6 | Upload returns before processing; status endpoint; retry + reprocess; audit events; logging + DEBUG off; restart recovery with job ownership |
+| **E0** | Baseline, schema v2 migration, workflow/audit foundations, canonical docs | US-E0-1..5 | **Done** — commit `daeb9c2`; copy rehearsal PASS; 220 tests green |
+| **E1** | Asynchronous pipeline core on the existing local extractor | US-E1-1..6 | **Done (uncommitted, awaiting review)** — upload returns before processing (TC-ASYNC-01/02); bounded retries + reprocess (TC-PIPE-FAIL-*); recovery + job ownership + dedupe (TC-RECV-01..04); logging/500 hardening (TC-ERR-500-01, TC-LOG-01/01b); 235 tests green. **Live-DB incident R-E1-8 recorded — user decision pending** |
 | **E2** | GLM extraction (text + vision) + JPG/PNG | US-E2-1..4 | Structured §6 extraction incl. new fields; malformed responses handled (TC-RESP); image gates; live smoke recorded |
 | **E3** | Business validation + duplicate classification + extended fields | US-E3-1..3 | §8 verdicts with findings; duplicates classified with explanations; review form covers all §6 fields |
 | **E4** | Approval workflow + roles | US-E4-1..3 | ₹1,00,000 routing; queue; approve/reject with mandatory reason; role route map enforced |

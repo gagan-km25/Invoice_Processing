@@ -12,11 +12,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 class Config:
-    # Network — never bind to 0.0.0.0 (NFR-1). DEBUG tooling is acceptable
-    # only because of this binding; change them together (exploration §12).
+    # Network — never bind to 0.0.0.0 (NFR-1). DEBUG is OFF in normal
+    # operation (enhancement §15: no stack traces to users); the Werkzeug
+    # debugger must not be re-enabled without revisiting that decision.
     HOST = "127.0.0.1"
     PORT = 5000
-    DEBUG = True
+    DEBUG = False
     USE_RELOADER = False  # reloader spawns child processes; problematic on Windows
 
     # Flash-message signing only — no sensitive session data in this app.
@@ -63,5 +64,19 @@ class Config:
     DATA_DIR = BASE_DIR / "data"
     UPLOAD_DIR = BASE_DIR / "uploads"
     SAMPLE_DIR = BASE_DIR / "sample_invoices"
+    LOG_DIR = DATA_DIR / "logs"
     DATABASE = DATA_DIR / "invoices.db"
     SCHEMA = BASE_DIR / "app" / "db" / "schema.sql"
+
+    # Background pipeline (Sprint E1): single in-process worker, serial
+    # jobs. Retries are bounded: a retryable failure is re-attempted up to
+    # WORKER_MAX_ATTEMPTS total runs with WORKER_RETRY_BACKOFF_SECONDS
+    # between attempts (tests set 0 for speed).
+    WORKER_AUTOSTART = True           # tests override to drive the worker manually
+    WORKER_MAX_ATTEMPTS = 3
+    WORKER_RETRY_BACKOFF_SECONDS = 1.0
+    # Bounded retries for transient SQLite lock/busy errors during job
+    # claiming or persistence (review finding M2). On exhaustion the row
+    # keeps its eligible status and boot-time recovery picks it up.
+    WORKER_DB_MAX_ATTEMPTS = 3
+    WORKER_POLL_SECONDS = 2.0         # UI status polling hint

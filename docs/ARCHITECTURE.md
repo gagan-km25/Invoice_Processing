@@ -63,7 +63,7 @@ implemented in Sprint E0):
 Approved→Rejected raise `InvalidTransition`). Corrections never trigger
 re-extraction; Reprocess (T5/T5b) re-runs the pipeline.
 
-## 4. Background processing & restart recovery (planned E1, approved design)
+## 4. Background processing & restart recovery (E1, approved design)
 
 - One `ThreadPoolExecutor` with a single worker; `queue.Queue` entries are
   `(invoice_id, job_kind)` with kinds `new_upload`, `reprocess`, `recovery`.
@@ -79,6 +79,16 @@ re-extraction; Reprocess (T5/T5b) re-runs the pipeline.
   within a boot; the claim ladder is the second guard.
 - Boot-time `recover_stalled()` selects rows in `uploaded`/`processing` and
   enqueues `recovery` jobs; it writes **nothing** to the database itself.
+- **Transient DB locks (Sprint E1, review M2):** SQLite lock/busy
+  `OperationalError`s during claiming or persistence are retried with
+  backoff, bounded by `WORKER_DB_MAX_ATTEMPTS` (default 3) per job. A retry
+  after a successful claim resumes the pipeline directly — the claim is a
+  single transaction, so no duplicate `processing_started` /
+  `processing_resumed` is written; a partially-run pipeline is re-run
+  idempotently. On exhaustion the row keeps its eligible status
+  (`uploaded`/`processing`) and is picked up by boot-time recovery — never
+  silently lost, never force-failed. Non-lock database errors keep the
+  existing containment.
 - Cross-boot: recovery is the sole resume path, once per boot. Two
   concurrent app instances on one DB are unsupported (single-user app).
 

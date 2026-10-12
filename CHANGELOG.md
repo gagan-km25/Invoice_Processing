@@ -1,5 +1,35 @@
 # Changelog
 
+## [Enhancement — Sprint E1] — 2026-10-12 (branch `enhancement/assignment`, uncommitted)
+
+- **Added:** `app/services/pipeline.py` — single serial in-process worker,
+  job kinds (`new_upload`/`reprocess`/`recovery`), enqueue dedupe, claim
+  ladder with recovery-job ownership (only recovery jobs resume `processing`
+  rows), bounded retries with persisted attempt counter, sanitised
+  `PipelineError` containment, boot-time `recover_stalled()`.
+- **Changed:** `POST /upload` no longer extracts in-request — it stores,
+  audits `invoice_uploaded`, enqueues, and redirects to the invoice detail
+  page; `GET /invoices/<id>/status` JSON endpoint; detail page available for
+  every status with live polling; review/save accept `completed` (pipeline
+  output) alongside legacy `extracted`; `POST /invoices/<id>/reprocess`.
+- **Changed:** `app/services/extraction.py` refactor — extraction persists
+  the draft and never writes status; failures raised as typed
+  `ExtractionRetryable`/`ExtractionPermanent` with user-safe messages
+  (unreadable file is retryable — OneDrive; scan/corrupt is permanent).
+  `update_extraction` leaves status untouched by default.
+- **Added:** `app/services/applog.py` — two structured loggers
+  (`app.events` allowlist-enforced; `app.errors` sanitised tracebacks only),
+  rotating files under `data/logs/` (git-ignored); generic 500 page with
+  HTTPException pass-through; `DEBUG=False`.
+- **Tests:** +15 pipeline tests (async, retries, recovery ownership,
+  duplicates, sanitisation, audit sequences); legacy upload/extraction/
+  review/history tests migrated to drive the worker. Full suite: **240
+  passed**.
+- **Incident (resolved):** accidental live-DB migration during production-boot
+  verification (TEST_PLAN.md R-E1-8); resolved under user decision Option B
+  (TEST_PLAN.md R-E1-9) — schema v2 retained, verified backup
+  `data/invoices-v2-backup-20261012-233018.db` created.
+
 ## [Enhancement — Sprint E0] — 2026-10-12 (branch `enhancement/assignment`)
 
 Invoice Processing System enhancement assignment begins. Baseline:

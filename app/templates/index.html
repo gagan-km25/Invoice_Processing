@@ -26,11 +26,11 @@
         <td>{{ invoice['page_count'] if invoice['page_count'] is not none else "—" }}</td>
         <td>{{ invoice['created_at'] }}</td>
         <td>
-          {% if invoice['status'] == 'extracted' %}
+          {% if invoice['status'] in ('extracted', 'completed') %}
           <a href="{{ url_for('invoices.review', invoice_id=invoice['id']) }}">Review</a>
-          {% elif invoice['status'] == 'saved' %}
-          <a href="{{ url_for('invoices.detail', invoice_id=invoice['id']) }}">Details</a>
+          ·
           {% endif %}
+          <a href="{{ url_for('invoices.detail', invoice_id=invoice['id']) }}">Details</a>
         </td>
       </tr>
       {% endfor %}

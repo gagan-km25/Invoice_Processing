@@ -6,8 +6,8 @@ plan: docs/03-plan.md.
 """
 from urllib.parse import urlsplit
 
-from flask import Flask, flash, redirect, request, url_for
-from werkzeug.exceptions import RequestEntityTooLarge
+from flask import Flask, flash, redirect, render_template, request, url_for
+from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
 
 from app.config import Config
 from app.db import init_db
@@ -22,6 +22,13 @@ def create_app(config_object=Config) -> Flask:
     app.config["DATA_DIR"].mkdir(parents=True, exist_ok=True)
     app.config["UPLOAD_DIR"].mkdir(parents=True, exist_ok=True)
     app.config["SAMPLE_DIR"].mkdir(parents=True, exist_ok=True)
+    app.config["LOG_DIR"].mkdir(parents=True, exist_ok=True)
+
+    # Structured logging (approved plan §8): allowlisted events + sanitised
+    # errors only — configured before anything can log.
+    from app.services import applog
+
+    applog.configure_logging(app)
 
     # SQLite schema (idempotent — safe on every boot).
     init_db(app)
@@ -30,6 +37,17 @@ def create_app(config_object=Config) -> Flask:
 
     app.register_blueprint(uploads.bp)
     app.register_blueprint(invoices.bp)
+
+    # Background pipeline (Sprint E1): single serial worker. Recovery runs
+    # at every boot; the thread only starts when WORKER_AUTOSTART is set
+    # (tests drive the worker manually via run_pending()).
+    from app.services.pipeline import InvoiceWorker
+
+    worker = InvoiceWorker(app)
+    app.extensions["invoice_worker"] = worker
+    worker.recover_stalled()
+    if app.config.get("WORKER_AUTOSTART"):
+        worker.start()
 
     @app.before_request
     def reject_cross_site_posts():
@@ -57,5 +75,20 @@ def create_app(config_object=Config) -> Flask:
         limit_mb = app.config["MAX_CONTENT_LENGTH"] / (1024 * 1024)
         flash(f"File is too large. The limit is {limit_mb:.0f} MB.", "error")
         return redirect(url_for("uploads.index"))
+
+    @app.errorhandler(Exception)
+    def unexpected(error):
+        # Generic 500 (enhancement §15, P-E-05 logging amendment): the user
+        # never sees a traceback; the logs never see exception text. The
+        # events log carries the class name only; app.errors gets a fixed
+        # template line without exc_info — arbitrary exception messages are
+        # never recorded. HTTPExceptions (404, 405, …) fall through to
+        # Flask's normal handling — Flask routes them here too, since
+        # errorhandler(Exception) matches them.
+        if isinstance(error, HTTPException):
+            return error
+        applog.log_event("unhandled_error", error_class=type(error).__name__)
+        applog.log_error("an unexpected error occurred")
+        return render_template("error.html"), 500
 
     return app

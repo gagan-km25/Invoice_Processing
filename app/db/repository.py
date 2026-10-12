@@ -163,20 +163,25 @@ def save_invoice(
     header: dict,
     lines: list[dict],
 ) -> None:
-    """Transition `extracted` → `saved` atomically (US-S3-05).
+    """Transition a reviewed invoice → `saved` atomically (US-S3-05).
+
+    Sprint E1: eligible source statuses are `extracted` (legacy rows) and
+    `completed` (the pipeline's extraction-complete state); the record is
+    written as `saved`, the human-flow terminal state until Sprint E4
+    introduces submit-for-approval.
 
     Writes the reviewed header columns and replaces the full line set in ONE
     transaction. Any failure rolls everything back and re-raises — the record
     is left exactly as it was (header and prior lines). Raises ValueError for
-    missing records or a status other than `extracted` (double-submit guard,
-    AC-05.3). `extraction_json` is intentionally untouched (AC-05.4).
+    missing records or an ineligible status (double-submit guard, AC-05.3).
+    `extraction_json` is intentionally untouched (AC-05.4).
     """
     record = get_invoice(conn, invoice_id)
     if record is None:
         raise ValueError(f"invoice {invoice_id} not found")
-    if record["status"] != "extracted":
+    if record["status"] not in ("extracted", "completed"):
         raise ValueError(
-            f"invoice {invoice_id} is {record['status']!r}, not 'extracted'"
+            f"invoice {invoice_id} is {record['status']!r}, not reviewable"
         )
     try:
         conn.execute(
@@ -268,21 +273,31 @@ def transition_status(
     event_type: str,
     actor: str = "system",
     details: str | None = None,
+    error_message: str | None = None,
 ) -> None:
     """Move an invoice to `new_status` and write the audit entry in ONE
     transaction (approved plan §C: the lifecycle event is never separated
-    from the status change). Transition legality is enforced by
-    app/services/workflow.py — this function only performs an already-
-    validated change and refuses unknown invoices."""
+    from the status change). `error_message` optionally records the
+    user-safe failure reason in the same transaction (terminal failures).
+    Transition legality is enforced by app/services/workflow.py — this
+    function only performs an already-validated change and refuses unknown
+    invoices."""
     record = get_invoice(conn, invoice_id)
     if record is None:
         raise ValueError(f"invoice {invoice_id} not found")
     now = _now()
     try:
-        conn.execute(
-            "UPDATE invoices SET status = ?, updated_at = ? WHERE id = ?",
-            (new_status, now, invoice_id),
-        )
+        if error_message is None:
+            conn.execute(
+                "UPDATE invoices SET status = ?, updated_at = ? WHERE id = ?",
+                (new_status, now, invoice_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE invoices SET status = ?, updated_at = ?, "
+                "error_message = ? WHERE id = ?",
+                (new_status, now, error_message, invoice_id),
+            )
         conn.execute(
             """
             INSERT INTO invoice_audit (invoice_id, event_type, actor, details, created_at)
@@ -296,19 +311,31 @@ def transition_status(
         raise
 
 
+def set_extract_attempts(conn: sqlite3.Connection, invoice_id: int, attempts: int) -> None:
+    """Persist the pipeline's attempt counter (visible, survives restarts)."""
+    conn.execute(
+        "UPDATE invoices SET extract_attempts = ?, updated_at = ? WHERE id = ?",
+        (attempts, _now(), invoice_id),
+    )
+    conn.commit()
+
+
 def update_extraction(
     conn: sqlite3.Connection,
     invoice_id: int,
     *,
     draft: dict,
-    status: str,
+    status: str | None = None,
     error_message: str | None = None,
+    write_lines: bool = True,
 ) -> None:
     """Persist extraction output: header columns, line items, draft JSON.
 
-    `draft["fields"]` values are written only when found/ambiguous; missing
-    stays NULL. Line items are replaced (idempotent re-extraction). The whole
-    thing runs in one transaction — the record is never half-written (NFR-5).
+    Sprint E1: `status` is now optional — None leaves `invoices.status`
+    untouched (the pipeline owns status via workflow transitions). Line
+    items are replaced when `write_lines` is true (idempotent
+    re-extraction). The whole thing runs in one transaction — the record is
+    never half-written (NFR-5).
     """
     from decimal import Decimal  # local import keeps repository dependency-light
 
@@ -320,38 +347,41 @@ def update_extraction(
 
     fields = draft.get("fields", {})
     now = _now()
+    assignments = [
+        "vendor = ?", "vendor_tax_id = ?", "invoice_number = ?",
+        "invoice_date = ?", "due_date = ?", "bill_to = ?", "currency = ?",
+        "subtotal = ?", "discount = ?", "tax_rate = ?", "tax = ?", "total = ?",
+        "page_count = ?", "extraction_json = ?", "updated_at = ?",
+    ]
+    params: list = [
+        column_value(fields.get("vendor")),
+        column_value(fields.get("vendor_tax_id")),
+        column_value(fields.get("invoice_number")),
+        column_value(fields.get("invoice_date")),
+        column_value(fields.get("due_date")),
+        column_value(fields.get("bill_to")),
+        column_value(fields.get("currency")),
+        column_value(fields.get("subtotal")),
+        column_value(fields.get("discount")),
+        column_value(fields.get("tax_rate")),
+        column_value(fields.get("tax")),
+        column_value(fields.get("total")),
+        (draft.get("meta") or {}).get("page_count"),
+        json.dumps(draft, ensure_ascii=False, default=str),
+        now,
+    ]
+    if status is not None:
+        assignments.insert(14, "status = ?")
+        params.insert(14, status)
+    if error_message is not None:
+        assignments.append("error_message = ?")
+        params.append(error_message)
+    params.append(invoice_id)
     conn.execute(
-        """
-        UPDATE invoices SET
-            vendor = ?, vendor_tax_id = ?, invoice_number = ?,
-            invoice_date = ?, due_date = ?, bill_to = ?, currency = ?,
-            subtotal = ?, discount = ?, tax_rate = ?, tax = ?, total = ?,
-            page_count = ?, extraction_json = ?,
-            status = ?, error_message = ?, updated_at = ?
-        WHERE id = ?
-        """,
-        (
-            column_value(fields.get("vendor")),
-            column_value(fields.get("vendor_tax_id")),
-            column_value(fields.get("invoice_number")),
-            column_value(fields.get("invoice_date")),
-            column_value(fields.get("due_date")),
-            column_value(fields.get("bill_to")),
-            column_value(fields.get("currency")),
-            column_value(fields.get("subtotal")),
-            column_value(fields.get("discount")),
-            column_value(fields.get("tax_rate")),
-            column_value(fields.get("tax")),
-            column_value(fields.get("total")),
-            (draft.get("meta") or {}).get("page_count"),
-            json.dumps(draft, ensure_ascii=False, default=str),
-            status,
-            error_message,
-            now,
-            invoice_id,
-        ),
+        f"UPDATE invoices SET {', '.join(assignments)} WHERE id = ?",
+        params,
     )
-    if status == "extracted":
+    if write_lines:
         conn.execute("DELETE FROM invoice_lines WHERE invoice_id = ?", (invoice_id,))
         for item in draft.get("lines", []):
             conn.execute(

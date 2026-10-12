@@ -1,8 +1,14 @@
-"""Upload routes (Sprint 1): home page with upload form + recent uploads,
-and POST /upload. Thin HTTP layer — gate logic lives in services/uploading.
+"""Upload routes (Sprint 1; async since Sprint E1): home page with upload
+form + recent uploads, and POST /upload.
+
+Thin HTTP layer — gate logic lives in services/uploading. Since Sprint E1
+the upload request does NOT extract: it stores the file + record, audits
+`invoice_uploaded`, enqueues a background job (single serial worker), and
+returns immediately. The invoice detail page shows live processing status.
 """
 from flask import (
     Blueprint,
+    current_app,
     flash,
     redirect,
     render_template,
@@ -12,7 +18,7 @@ from flask import (
 
 from app.db import get_db
 from app.db.repository import find_by_hash, list_recent
-from app.services.extraction import extract_invoice
+from app.services.pipeline import JOB_NEW_UPLOAD, record_upload_event
 from app.services.uploading import UploadRejected, store_upload
 
 bp = Blueprint("uploads", __name__)
@@ -36,12 +42,18 @@ def upload():
         flash(exc.user_message, "error")
         return redirect(url_for("uploads.index"))
 
+    record_upload_event(invoice["id"])
+
+    duplicates = []
     conn = get_db()
     try:
         duplicates = find_by_hash(conn, invoice["file_hash"], exclude_id=invoice["id"])
     finally:
         conn.close()
 
+    enqueued = current_app.extensions["invoice_worker"].enqueue(
+        invoice["id"], JOB_NEW_UPLOAD
+    )
     flash(f"Uploaded successfully (record #{invoice['id']}).", "success")
     if duplicates:
         ids = ", ".join(f"#{row['id']}" for row in duplicates)
@@ -50,14 +62,10 @@ def upload():
             "It was stored again anyway.",
             "warning",
         )
-
-    # Sprint 2: extraction runs synchronously in-request (plan §4 steps 8–10).
-    # Sprint 3: successful extraction leads straight into review.
-    ok, message = extract_invoice(invoice["id"])
-    if ok:
-        flash(f"Extraction complete (record #{invoice['id']}): {message}.", "success")
-        return redirect(
-            url_for("invoices.review", invoice_id=invoice["id"])
+    if enqueued:
+        flash(
+            "Processing continues in the background — this page shows the "
+            "current status.",
+            "info",
         )
-    flash(f"Extraction failed (record #{invoice['id']}): {message}.", "error")
-    return redirect(url_for("uploads.index"))
+    return redirect(url_for("invoices.detail", invoice_id=invoice["id"]))

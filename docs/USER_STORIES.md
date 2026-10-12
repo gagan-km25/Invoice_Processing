@@ -48,19 +48,27 @@ ACs: all six `docs/*.md` + root `CLAUDE_USAGE.md` exist; only recorded
 results appear; future sections state "planned" rather than claiming
 completion. *Verified by:* E6 TC-DOC-CHECK (sprint E0: manual inspection).
 
-## Sprint E1 — asynchronous pipeline core (planned)
+## Sprint E1 — asynchronous pipeline core (Done, 2026-10-12)
 
-- **US-E1-1** Pipeline orchestrator + serial background worker (statuses
-  `processing→completed/validation_failed/failed`). ACs: TC-PIPE-INT-*.
-- **US-E1-2** Non-blocking upload + status endpoint + detail for all
-  statuses. ACs: TC-ASYNC-01/02.
-- **US-E1-3** Transient-failure retry (2× backoff) + reprocess action.
-  ACs: TC-PIPE-FAIL-*.
-- **US-E1-4** Audit events wired through the pipeline. ACs: TC-AUDIT-*.
-- **US-E1-5** DEBUG off, structured logging, generic 500. ACs: TC-ERR-500-01.
-- **US-E1-6** Restart recovery with job ownership: only recovery-designated
-  jobs resume stale `processing` invoices; normal jobs skip; enqueue dedupe.
-  ACs: TC-RECV-01..04.
+- **US-E1-1 (Done)** Pipeline orchestrator + serial background worker
+  (`app/services/pipeline.py`): uploaded→processing→completed/failed using
+  the existing local extractor. *Verified by:* TC-ASYNC-01,
+  TC-PIPE-FAIL-01..03.
+- **US-E1-2 (Done)** Non-blocking upload (redirect to detail), JSON status
+  endpoint, detail for all statuses, polling JS. *Verified by:* TC-ASYNC-01,
+  TC-ASYNC-02, TC-SM-05.
+- **US-E1-3 (Done)** Bounded retries (config, default 3 attempts) +
+  reprocess endpoint with T5 audited atomically. *Verified by:*
+  TC-PIPE-FAIL-02/03/06.
+- **US-E1-4 (Done)** Audit events wired: invoice_uploaded,
+  processing_started/resumed/completed/failed, extraction_completed/failed,
+  reprocess_requested. *Verified by:* event-sequence assertions inside
+  TC-ASYNC/TC-PIPE/TC-RECV.
+- **US-E1-5 (Done)** DEBUG=False, structured two-logger logging with a
+  structural allowlist, sanitised tracebacks only, generic 500 (HTTP
+  exceptions pass through). *Verified by:* TC-ERR-500-01, TC-LOG-01/01b.
+- **US-E1-6 (Done)** Restart recovery with job ownership + enqueue dedupe.
+  *Verified by:* TC-RECV-01..04.
 
 ## Sprint E2 — GLM extraction + images (planned)
 
