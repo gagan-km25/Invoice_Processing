@@ -231,6 +231,71 @@ def save_invoice(
         raise
 
 
+def insert_audit(
+    conn: sqlite3.Connection,
+    invoice_id: int,
+    event_type: str,
+    actor: str = "system",
+    details: str | None = None,
+) -> int:
+    """Append one audit entry; returns the audit row id."""
+    cursor = conn.execute(
+        """
+        INSERT INTO invoice_audit (invoice_id, event_type, actor, details, created_at)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (invoice_id, event_type, actor, details, _now()),
+    )
+    conn.commit()
+    return cursor.lastrowid
+
+
+def get_audit(
+    conn: sqlite3.Connection, invoice_id: int
+) -> list[sqlite3.Row]:
+    """Audit entries of one invoice, oldest first."""
+    return conn.execute(
+        "SELECT * FROM invoice_audit WHERE invoice_id = ? ORDER BY id",
+        (invoice_id,),
+    ).fetchall()
+
+
+def transition_status(
+    conn: sqlite3.Connection,
+    invoice_id: int,
+    *,
+    new_status: str,
+    event_type: str,
+    actor: str = "system",
+    details: str | None = None,
+) -> None:
+    """Move an invoice to `new_status` and write the audit entry in ONE
+    transaction (approved plan §C: the lifecycle event is never separated
+    from the status change). Transition legality is enforced by
+    app/services/workflow.py — this function only performs an already-
+    validated change and refuses unknown invoices."""
+    record = get_invoice(conn, invoice_id)
+    if record is None:
+        raise ValueError(f"invoice {invoice_id} not found")
+    now = _now()
+    try:
+        conn.execute(
+            "UPDATE invoices SET status = ?, updated_at = ? WHERE id = ?",
+            (new_status, now, invoice_id),
+        )
+        conn.execute(
+            """
+            INSERT INTO invoice_audit (invoice_id, event_type, actor, details, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (invoice_id, event_type, actor, details, now),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+
+
 def update_extraction(
     conn: sqlite3.Connection,
     invoice_id: int,

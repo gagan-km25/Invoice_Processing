@@ -37,6 +37,21 @@ def app(tmp_path):
 
 
 @pytest.fixture()
+def make_app_config(tmp_path):
+    """make_app_config(database=None) -> config for create_app against an
+    arbitrary database file (Sprint E0 migration tests point this at a
+    copied fixture database; None = the tmp_path default)."""
+
+    def _make(database=None):
+        config = _test_config(tmp_path)
+        if database is not None:
+            config.DATABASE = database
+        return config
+
+    return _make
+
+
+@pytest.fixture()
 def client(app):
     return app.test_client()
 

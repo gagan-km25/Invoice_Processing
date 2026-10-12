@@ -1,7 +1,41 @@
 # Changelog
 
-All notable changes to the Invoice Extractor are documented here.
-The project follows the sprint plan in [docs/03-plan.md](docs/03-plan.md).
+## [Enhancement — Sprint E0] — 2026-10-12 (branch `enhancement/assignment`)
+
+Invoice Processing System enhancement assignment begins. Baseline:
+v1.0.0 (`f69a193`).
+
+- **Added:** versioned schema migration v1→v2 (`app/db/migrations.py`;
+  `PRAGMA user_version`): table rebuild preserving IDs, values, timestamps,
+  line items; legacy status mapping (`extracted`/`saved` → `completed`,
+  original kept in `legacy_status`); one `record_migrated` audit row per
+  invoice; `foreign_key_check` gate. Copied-database rehearsal against the
+  real `data/invoices.db` PASS; the live database itself was not migrated.
+- **Added:** schema v2 (`app/db/schema.sql`): 8-state invoice lifecycle,
+  approval/validation/duplicate/AI columns, `invoice_lines.line_tax`,
+  `invoice_audit` table, v2 indexes. Status CHECK is transitional (v1
+  aliases retained until Sprint E5).
+- **Added:** `app/services/workflow.py` — the single status-transition
+  authority (legal/illegal transitions incl. terminal `approved`/`rejected`)
+  and the §10 approval-routing rule (< ₹1,00,000 → manager, ≥ → finance).
+- **Added:** `app/services/audit.py` event catalogue;
+  `repository.insert_audit`/`get_audit`/`transition_status` (status + audit
+  in one transaction).
+- **Added:** env-based AI configuration (Z.ai GLM; key via `ZAI_API_KEY`
+  only), `.env.example` placeholders, `.env` git-ignored.
+- **Added:** canonical enhancement docs — `docs/REQUIREMENTS.md`,
+  `USER_STORIES.md`, `SPRINT_PLAN.md`, `ARCHITECTURE.md`, `TEST_PLAN.md`,
+  `KNOWN_ISSUES.md`, root `CLAUDE_USAGE.md` (genuine-evidence rule).
+- **Tests:** +51 (migration preservation/idempotency, transitions,
+  threshold boundaries, config safeguards). Full suite: 220 passed
+  (169 legacy + 51 new).
+
+## [1.0.0] — Invoice Extractor v1 (2026-10-06)
+
+All notable changes to the Invoice Extractor and its enhancement are
+documented here. The v1 project followed the sprint plan in
+[docs/03-plan.md](03-plan.md); the enhancement follows
+[docs/SPRINT_PLAN.md](SPRINT_PLAN.md).
 
 ## 1.0.0 — Sprint 6: Final Verification, Documentation & Evaluation Readiness (2026-10-06)
 

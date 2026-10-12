@@ -4,6 +4,9 @@ __pycache__/
 .pytest_cache/
 venv/
 
+# Secrets — never commit (.env.example documents the variable names)
+.env
+
 # Local data — never commit (privacy + generated at boot).
 # Real invoices live here; see docs/01 §10 (M-2: sample invoices stay local).
 data/
