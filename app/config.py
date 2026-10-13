@@ -37,6 +37,10 @@ class Config:
     ZAI_TEXT_MODEL = os.environ.get("ZAI_TEXT_MODEL", "glm-4.6")
     ZAI_VISION_MODEL = os.environ.get("ZAI_VISION_MODEL", "glm-4.5v")
     ZAI_TIMEOUT_SECONDS = int(os.environ.get("ZAI_TIMEOUT_SECONDS", "60"))
+    # Output cap per GLM completion — prevents truncated JSON on long
+    # invoices and bounds cost. Oversized invoices that hit this cap fail
+    # visibly (invalid response → re-ask → permanent) and stay reprocessable.
+    ZAI_MAX_TOKENS = int(os.environ.get("ZAI_MAX_TOKENS", "4000"))
 
     # Business rules (enhancement assignment §10/§8.2; approved plan §C).
     # Approval routing: total < threshold → manager, else finance. The
@@ -80,3 +84,10 @@ class Config:
     # keeps its eligible status and boot-time recovery picks it up.
     WORKER_DB_MAX_ATTEMPTS = 3
     WORKER_POLL_SECONDS = 2.0         # UI status polling hint
+
+    # AI extraction (Sprint E2). Raw provider responses are stored locally
+    # for traceability, size-capped; vision extraction rasterizes at most
+    # VISION_MAX_PAGES pages of a scanned PDF (each image is additionally
+    # capped by the provider's own ≤5 MB / ≤6000×6000 px limits).
+    RAW_RESPONSE_MAX_BYTES = 64 * 1024
+    VISION_MAX_PAGES = 3

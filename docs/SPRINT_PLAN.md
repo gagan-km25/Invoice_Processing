@@ -8,8 +8,8 @@ strictly top-to-bottom.
 | Sprint | Goal | Stories | Expected outcome (measurable) |
 |---|---|---|---|
 | **E0** | Baseline, schema v2 migration, workflow/audit foundations, canonical docs | US-E0-1..5 | **Done** — commit `daeb9c2`; copy rehearsal PASS; 220 tests green |
-| **E1** | Asynchronous pipeline core on the existing local extractor | US-E1-1..6 | **Done (uncommitted, awaiting review)** — upload returns before processing (TC-ASYNC-01/02); bounded retries + reprocess (TC-PIPE-FAIL-*); recovery + job ownership + dedupe (TC-RECV-01..04); logging/500 hardening (TC-ERR-500-01, TC-LOG-01/01b); 235 tests green. **Live-DB incident R-E1-8 recorded — user decision pending** |
-| **E2** | GLM extraction (text + vision) + JPG/PNG | US-E2-1..4 | Structured §6 extraction incl. new fields; malformed responses handled (TC-RESP); image gates; live smoke recorded |
+| **E1** | Asynchronous pipeline core on the existing local extractor | US-E1-1..6 | **Done and committed at `b4bbee9`** — upload returns before processing (TC-ASYNC-01/02); bounded retries + reprocess (TC-PIPE-FAIL-*); recovery + job ownership + dedupe (TC-RECV-01..04); logging/500 hardening (TC-ERR-500-01, TC-LOG-01/01b); 240 tests green. Live-DB incident R-E1-8 **resolved** under TEST_PLAN.md R-E1-9 (user decision Option B: schema v2 retained; verified backup created) |
+| **E2** | GLM extraction (text + vision) + JPG/PNG | US-E2-1..4 | **Done (implemented; live smoke pending user key)** — GLM text/vision extraction with strict response validation, one re-ask, raw retention, unconfigured fallback per decision 1, image gates + MIME serving; extended §6 fields (PO/ship-to/line tax) move to E3 with the schema work |
 | **E3** | Business validation + duplicate classification + extended fields | US-E3-1..3 | §8 verdicts with findings; duplicates classified with explanations; review form covers all §6 fields |
 | **E4** | Approval workflow + roles | US-E4-1..3 | ₹1,00,000 routing; queue; approve/reject with mandatory reason; role route map enforced |
 | **E5** | Views & lifecycle polish | US-E5-1..3 | All-status list + filter; detail panels; delete guards; schema tightening (v3) |

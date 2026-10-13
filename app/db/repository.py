@@ -31,17 +31,21 @@ def insert_invoice(
     stored_filename: str,
     status: str,
     page_count: int | None = None,
+    file_type: str = "pdf",
 ) -> int:
     """Create a new invoice record and return its id."""
     now = _now()
     cursor = conn.execute(
         """
         INSERT INTO invoices (
-            file_hash, original_filename, stored_filename,
+            file_hash, original_filename, stored_filename, file_type,
             status, page_count, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (file_hash, original_filename, stored_filename, status, page_count, now, now),
+        (
+            file_hash, original_filename, stored_filename, file_type,
+            status, page_count, now, now,
+        ),
     )
     conn.commit()
     return cursor.lastrowid
@@ -274,30 +278,33 @@ def transition_status(
     actor: str = "system",
     details: str | None = None,
     error_message: str | None = None,
+    raw_response: str | None = None,
 ) -> None:
     """Move an invoice to `new_status` and write the audit entry in ONE
     transaction (approved plan §C: the lifecycle event is never separated
     from the status change). `error_message` optionally records the
-    user-safe failure reason in the same transaction (terminal failures).
-    Transition legality is enforced by app/services/workflow.py — this
-    function only performs an already-validated change and refuses unknown
-    invoices."""
+    user-safe failure reason and `raw_response` the size-capped provider
+    response in the same transaction (terminal failures). Transition
+    legality is enforced by app/services/workflow.py — this function only
+    performs an already-validated change and refuses unknown invoices."""
     record = get_invoice(conn, invoice_id)
     if record is None:
         raise ValueError(f"invoice {invoice_id} not found")
     now = _now()
     try:
-        if error_message is None:
-            conn.execute(
-                "UPDATE invoices SET status = ?, updated_at = ? WHERE id = ?",
-                (new_status, now, invoice_id),
-            )
-        else:
-            conn.execute(
-                "UPDATE invoices SET status = ?, updated_at = ?, "
-                "error_message = ? WHERE id = ?",
-                (new_status, now, error_message, invoice_id),
-            )
+        assignments = ["status = ?", "updated_at = ?"]
+        params: list = [new_status, now]
+        if error_message is not None:
+            assignments.append("error_message = ?")
+            params.append(error_message)
+        if raw_response is not None:
+            assignments.append("raw_response = ?")
+            params.append(raw_response)
+        params.append(invoice_id)
+        conn.execute(
+            f"UPDATE invoices SET {', '.join(assignments)} WHERE id = ?",
+            params,
+        )
         conn.execute(
             """
             INSERT INTO invoice_audit (invoice_id, event_type, actor, details, created_at)
@@ -328,14 +335,18 @@ def update_extraction(
     status: str | None = None,
     error_message: str | None = None,
     write_lines: bool = True,
+    raw_response: str | None = None,
+    clear_raw_response: bool = False,
 ) -> None:
     """Persist extraction output: header columns, line items, draft JSON.
 
-    Sprint E1: `status` is now optional — None leaves `invoices.status`
+    Sprint E1: `status` is optional — None leaves `invoices.status`
     untouched (the pipeline owns status via workflow transitions). Line
     items are replaced when `write_lines` is true (idempotent
-    re-extraction). The whole thing runs in one transaction — the record is
-    never half-written (NFR-5).
+    re-extraction). `raw_response` (when given) stores the size-capped AI
+    response; `clear_raw_response=True` empties it (local-parser runs).
+    The whole thing runs in one transaction — the record is never
+    half-written (NFR-5).
     """
     from decimal import Decimal  # local import keeps repository dependency-light
 
@@ -373,6 +384,11 @@ def update_extraction(
     if status is not None:
         assignments.insert(14, "status = ?")
         params.insert(14, status)
+    if raw_response is not None:
+        assignments.append("raw_response = ?")
+        params.append(raw_response)
+    if clear_raw_response:
+        assignments.append("raw_response = NULL")
     if error_message is not None:
         assignments.append("error_message = ?")
         params.append(error_message)

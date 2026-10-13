@@ -24,6 +24,10 @@ nothing is pre-recorded for future sprints.
 | R-E1-9 | 2026-10-12 | **Incident resolution (user decision: Option B — retain schema v2)** | Verified backup created **before** any other action: `data/invoices-v2-backup-20261012-233018.db` (77,824 bytes) via SQLite's backup API from a `mode=ro` source connection. Independent verification **PASS**: 11 invoices; IDs `[1,2,3,4,5,7,8,9,10,11,12]` (pre-existing gap at id 6 preserved); statuses `completed`×10 (all legacy `saved`) + `failed`×1 (legacy `failed`); `user_version`=2; `foreign_key_check` clean; `integrity_check` ok; 11 `record_migrated` audit rows; **full logical equality with the source** (rows, schema, version). Source confirmed unchanged (pre/post snapshots identical on the read-only connection). Two earlier verification-script runs reported FAIL due to bugs in the verification script itself (v1-era positional column indexes; wrong expected ID gap) — the backup data was correct throughout; re-verified with named columns. Live DB retained at v2; no migration or restoration re-run |
 | R-E1-10 | 2026-10-13 | review-fix **M1** (per-episode retry allowance): `pytest tests/integration/test_async_pipeline.py -q` then `pytest -q` | **16 passed** focused (incl. new TC-PIPE-FAIL-07 — exhausted episode followed by a manual reprocess receives the full allowance again); full suite **236 passed**, 0 failed |
 | R-E1-11 | 2026-10-13 | review-fix **M2** (bounded transient DB-lock retries): `pytest tests/integration/test_async_pipeline.py -q` then `pytest -q` | **20 passed** focused (incl. new TC-DBLOCK-01..04 — lock retried to success; exhaustion leaves `processing` for boot recovery; non-lock errors not retried; claim lock without duplicate T1); full suite **240 passed**, 0 failed |
+| R-E2-1 | 2026-10-13 | new E2 tests, iterative development runs (exact failure sequence recorded in the prompt log P-E-17): placeholder-count bug in `insert_invoice`, missing `Path` import, unmapped provider errors, currency normalization | Final E2 test files: `tests/unit/test_glm_client.py` (10), `tests/unit/test_glm_response.py` (10), `tests/integration/test_glm_extraction.py` (10) — **30 passed** after fixes |
+| R-E2-2 | 2026-10-13 | `pytest -q` (full suite) | **275 passed**, 0 failed (~26 s) — 240 pre-E2 + 35 new |
+| R-E2-4 | 2026-10-13 | code-review fixes **M-A/M-B/L-A/L-B/L-C** (+ H-1 vision-model threading found during M-B): focused `pytest tests/unit/test_glm_client.py tests/unit/test_glm_response.py tests/integration/test_glm_extraction.py -q` then `pytest -q` | **40 passed** focused (incl. new: max_tokens request-shape, non-RequestException not transient, rasterize failure → safe permanent, stale-raw cleared by local fallback, vision path calls `ZAI_VISION_MODEL`); full suite **280 passed**, 0 failed |
+| R-E2-3 | — | Live API smoke (text PDF + image, real key) | **NOT YET PERFORMED** — requires the user's Z.ai API key and explicit go-ahead; recorded here only when actually run |
 
 ## 2. Sprint E0 test catalogue (executed)
 
@@ -68,14 +72,18 @@ nothing is pre-recorded for future sprints.
 
 ## 3. Planned catalogue (NOT yet run — listed for traceability, no results claimed)
 
-- **E2:** TC-GLM-*, TC-RESP-01..12, TC-UPG-*, TC-KEY-01, TC-RAW-01/02
-  (raw-response retention arrives with the GLM client), live smoke (manual,
-  recorded).
+- **E2 live smoke (manual, pending user key):** one real text PDF and one
+  real image through the configured GLM path; model names confirmed against
+  the account; results recorded here.
 - **E3:** validation unit suite (≥20), TC-VAL-INT-01, TC-DUP-*.
 - **E4:** TC-APPR-ACT-*, TC-APPR-REJ-01/02, TC-ROLE-01..14.
-- **E5:** TC-LIST-*, TC-DETAIL-*, delete guards, v3 schema-tightening tests.
+- **E5:** TC-LIST-*, TC-DETAIL-*, delete guards, raw-response UI rendering
+  (TC-RAW-02 moves here), v3 schema-tightening tests.
 - **E6:** full regression, TC-MIG-08 final rehearsal record, TC-DOC-CHECK,
   end-to-end demo dry run (manual, recorded).
 
-Sprint E1 results are in §2b. TC-AUDIT-* assertions are embedded in the
-TC-ASYNC/TC-PIPE/TC-RECV event-sequence checks rather than separate tests.
+Sprint E1 results are in §2b; Sprint E2 results in the run table above
+(R-E2-1/2) and the E2 catalogue now executed: TC-GLM-*, TC-RESP-01..12,
+TC-UPG-*, TC-KEY-01, TC-RAW-01 (truncation; UI-rendering half moves to E5),
+fallback and unconfigured-AI behavior — see `tests/unit/test_glm_client.py`,
+`tests/unit/test_glm_response.py`, `tests/integration/test_glm_extraction.py`.

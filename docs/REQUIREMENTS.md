@@ -12,14 +12,14 @@ recorded test run or manual check.
 | ID | Requirement (assignment source) | Priority | Status |
 |---|---|---|---|
 | FR-E1 | Vendor/approver roles with the route map in ARCHITECTURE.md §6 (§3) | Must | Planned (E4) |
-| FR-E2 | Upload accepts PDF, JPG, PNG; validates type, size, empty files; size limit stays centralised (§4) | Must | Planned (E2) |
+| FR-E2 | Upload accepts PDF, JPG, PNG; validates type, size, empty files; size limit stays centralised (§4) | Must | **Done** (E2: gates + content signatures; TC-UPG-*) |
 | FR-E3 | Upload returns before extraction completes (§4) | Must | **Done** (E1: TC-ASYNC-01) |
 | FR-E4 | Unique invoice ID + appropriate initial status on upload (§4) | Must | **Done** (v1 baseline) |
 | FR-E5 | Background processing with statuses Uploaded/Processing/Completed/Failed (+ Pending Approval, Validation Failed, Approved, Rejected per §12) (§5) | Must | **Done** (E1: serial in-process worker; approval statuses arrive E4) |
 | FR-E6 | Graceful extraction-failure handling + retry for retryable failures (§5) | Must | **Done** (E1: TC-PIPE-FAIL-01..06) |
-| FR-E7 | Extraction of all §6 fields: invoice number/date, due date, vendor, GSTIN, currency, PO number, subtotal, tax, total; bill-to/ship-to names + addresses; line items with description, quantity, unit price, tax, line total (§6) | Must | Planned (E2/E3) |
-| FR-E8 | Structured storage + retention of the raw AI response for traceability (§6) | Must | Planned (E2) |
-| FR-E9 | AI response validation before use: missing fields, invalid JSON, wrong types, invalid dates/numbers; malformed responses never crash and land in a failure state with a recorded error (§7) | Must | Planned (E2) |
+| FR-E7 | Extraction of all §6 fields: invoice number/date, due date, vendor, GSTIN, currency, PO number, subtotal, tax, total; bill-to/ship-to names + addresses; line items with description, quantity, unit price, tax, line total (§6) | Must | **Done for the current draft shape** (E2: GLM text/vision + local fallback; PO number + bill-to/ship-to + line tax fields arrive with the extended schema in E3) |
+| FR-E8 | Structured storage + retention of the raw AI response for traceability (§6) | Must | **Done** (E2: size-capped `raw_response`; TC-RAW-01) |
+| FR-E9 | AI response validation before use: missing fields, invalid JSON, wrong types, invalid dates/numbers; malformed responses never crash and land in a failure state with a recorded error (§7) | Must | **Done** (E2: strict validator + one re-ask; TC-RESP-*, TC-GLM-UNAVAIL-*) |
 | FR-E10 | Mandatory-field validation: invoice number, invoice date, vendor name, currency, total amount (§8.1) | Must | Planned (E3) |
 | FR-E11 | Amount validation: subtotal + tax = total; line-item sum = subtotal; configurable tolerance (default ₹0.01) (§8.2) | Must | Planned (E3) |
 | FR-E12 | Date validation: invoice date ≤ current date; due date ≥ invoice date (§8.3) | Must | Planned (E3) |
@@ -41,7 +41,7 @@ recorded test run or manual check.
 | NFR-E2 | Separation of concerns: thin routes → services → repository-only SQL (§17) | **Done** (E0 code follows it) |
 | NFR-E3 | No unnecessary complexity: no broker, no ORM, no new front-end stack (§17) | **Done** (E0) / continuous |
 | NFR-E4 | Secrets: API key via environment only; never committed, logged, or returned to users (§17/§22) | **Done** (E0 plumbing + TC-CFG/TC-KEY tests) |
-| NFR-E5 | Data privacy: invoice content leaves the machine only during GLM extraction, disclosed in README/KNOWN_ISSUES (§15) | Planned (E2 disclosure) |
+| NFR-E5 | Data privacy: invoice content leaves the machine only during GLM extraction, disclosed in README/KNOWN_ISSUES (§15) | **Done** (E2: implemented + disclosed; live smoke pending user key) |
 | NFR-E6 | Logging: structured allowlist events; tracebacks only in the errors log of sanitised exceptions (§15) | **Done** (E1: applog allowlist enforced structurally; TC-LOG-01b, TC-ERR-500-01) |
 | NFR-E7 | Migration safety: live DB never migrated before a recorded copy rehearsal; timestamped backup before any live migration | **Breached 2026-10-12 (E1 incident R-E1-8): an in-process boot migrated the live DB without authorization; restoration drafted, awaiting user decision. Rehearsal itself had passed (R-E0-4)** |
 | NFR-E8 | Tests run against temporary databases only (baseline NFR-8) | **Done** (unchanged) |

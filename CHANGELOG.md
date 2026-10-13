@@ -1,6 +1,30 @@
 # Changelog
 
-## [Enhancement — Sprint E1] — 2026-10-12 (branch `enhancement/assignment`, uncommitted)
+## [Enhancement — Sprint E2] — 2026-10-13 (branch `enhancement/assignment`, uncommitted)
+
+- **Added:** `app/services/glm_client.py` — GLM (Z.ai) chat client over
+  pinned `requests` 2.34.2: text path with native JSON mode, vision path
+  with base64 images, transient (timeout/5xx/429) vs permanent (4xx/
+  malformed envelope) classification. Key travels only in the Authorization
+  header; provider bodies never enter exceptions or logs.
+- **Changed:** `app/services/extraction.py` — provider selection per
+  approved decisions (GLM when configured; local rules parser only as
+  unconfigured fallback for text PDFs; images/scans require GLM); strict
+  AI-response validation with one re-ask; raw responses size-capped into
+  `invoices.raw_response`; scanned PDFs rasterized via pypdfium2
+  (≤ `VISION_MAX_PAGES` = 3 pages).
+- **Changed:** upload gates accept `.jpg/.jpeg/.png` with content-signature
+  validation (`FF D8 FF` / `89 50 4E 47`); original-file serving uses
+  correct MIME types; `invoices.file_type` set at upload.
+- **Tests:** +40 focused E2 test executions (GLM client transport, response
+  conversion, image gates, vision/scan paths, fallback, unconfigured-AI
+  failures, raw truncation, key-safety, rasterize-failure and stale-raw
+  cases — all offline with mocked HTTP). Full suite: **280 passed**, 0
+  failed.
+- **Pending:** live API smoke (needs the user's Z.ai key) — recorded
+  separately when performed (TEST_PLAN R-E2-3).
+
+## [Enhancement — Sprint E1] — 2026-10-12 (branch `enhancement/assignment`)
 
 - **Added:** `app/services/pipeline.py` — single serial in-process worker,
   job kinds (`new_upload`/`reprocess`/`recovery`), enqueue dedupe, claim

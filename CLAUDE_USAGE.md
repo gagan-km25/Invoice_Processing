@@ -98,6 +98,29 @@ docs/SPRINT_PLAN.md + docs/ARCHITECTURE.md.
   runs: M1 — 16 focused / 236 full; M2 — 20 focused / 240 full
   (docs/TEST_PLAN.md R-E1-10/11). Full M2 analysis and evidence:
   prompt log P-E-10/P-E-11.
+- **Sprint E2 implementation (2026-10-13, genuine).** Claude Code
+  implemented the GLM client (requests 2.34.2, pinned; text JSON-mode and
+  vision base64 paths; transient/permanent classification), the
+  provider-selection extraction flow with strict response validation, one
+  re-ask, size-capped raw retention, and pypdfium2 rasterization (≤3
+  pages), extended the upload gates to JPG/JPEG/PNG with content
+  signatures, and added 30 offline tests (mocked HTTP only). Development
+  was test-driven in small cycles; the suite caught four genuine defects
+  during the build (recorded under Debugging below: D-5, D-6, D-7 and the
+  PIL environment issue). Final recorded result: **275 passed** (240
+  pre-E2 + 35 new). The live API smoke has NOT been performed — it awaits
+  the user's Z.ai key and is recorded separately (TEST_PLAN R-E2-3).
+- **Sprint E2 review-and-fix cycle (2026-10-13, genuine).** The code
+  review confirmed M-A (rasterization errors escaping unclassified — now a
+  safe permanent failure), M-B (no output cap — `ZAI_MAX_TOKENS`, default
+  4000, asserted in request-shape tests), L-A (dead MIME dict removed),
+  L-B (local-parser runs clear stale GLM raw responses), and L-C
+  (transport catch narrowed to `requests.exceptions.RequestException`).
+  While adding the M-B request-shape assertion, the review's stubs were
+  exposed as masking **H-1: the vision path was calling the TEXT model**
+  (`_glm_chat` hardcoded it); the model is now threaded through and
+  asserted. Recorded runs: **40 focused / 280 full**, all green
+  (TEST_PLAN R-E2-4).
 
 ## Debugging (genuine cases — to be appended as they occur)
 
@@ -170,6 +193,82 @@ only if they occur.
   status change (route only guards + enqueues).
 - **Testing:** TC-PIPE-FAIL-06 asserts the full reprocess lifecycle, the
   single audited T5, and refusal paths with no audit writes.
+
+### D-5 — GLM provider errors became generic terminal failures (Sprint E2, 2026-10-13)
+
+- **Problem:** With a persistently failing provider stub, the invoice went
+  `failed` after exactly **one** attempt instead of the configured three,
+  with a generic message.
+- **Investigation:** `_run_pipeline`'s generic `except Exception` was
+  converting the client's `GlmTransient` (raised by `post_chat`) into a
+  sanitised `PipelineError` — the pipeline's retry allowance never saw it.
+- **Root cause:** Client exceptions were never mapped to extraction's typed
+  failure classes.
+- **Solution:** `_glm_chat` catches `GlmTransient`/`GlmPermanent` and
+  re-raises them as `ExtractionRetryable`/`ExtractionPermanent` (user-safe
+  messages, cause suppressed). The pipeline's per-episode retry allowance
+  and terminal handling then apply unchanged.
+- **Testing:** TC-GLM-UNAVAIL-01 (exhaustion at the bound, HTTP-status
+  message) and the retry-then-success test.
+
+### D-6 — insert_invoice placeholder/column mismatch (Sprint E2, 2026-10-13)
+
+- **Problem:** Every upload returned HTTP 500 with
+  `sqlite3.OperationalError: 9 values for 8 columns` as soon as
+  `insert_invoice` gained the `file_type` column.
+- **Investigation:** Called `store_upload` directly under an app context
+  with the exception propagated — the traceback pointed at the INSERT in
+  [app/db/repository.py](app/db/repository.py).
+- **Root cause:** The edit added the `file_type` column and its value but
+  left one placeholder too many in the VALUES tuple.
+- **Solution:** Placeholder count corrected to 8; a diagnostic harness
+  (temp-configured app, direct service call) was used because the sanitised
+  500 handler intentionally hides tracebacks.
+- **Testing:** All upload-path tests pass; the suite's image-gate cases
+  exercise the fixed statement.
+
+### D-7 — GLM currency not normalized (Sprint E2, 2026-10-13)
+
+- **Problem:** `test_valid_response_builds_parser_shaped_draft` failed:
+  GLM `"currency": "usd"` produced draft value `'usd'` where the local
+  parser normalizes to `'USD'`.
+- **Investigation:** Compared the validator's currency branch with the
+  parser's — the 3-letter check existed but no case normalization.
+- **Root cause:** Lowercase model output passed the length check unchanged.
+- **Solution:** `ai_json_to_draft` upper-cases a valid 3-letter currency.
+- **Testing:** Unit test now asserts `USD`; full suite 275 passed.
+
+### D-8 — Re-ask call omitted the model argument (Sprint E2, 2026-10-13)
+
+- **Problem:** A malformed GLM response produced the GENERIC failure
+  message (`worker_error error_class=TypeError`) instead of the typed
+  invalid-response failure.
+- **Investigation:** The traceback (captured via a direct
+  `_glm_extract_with_reask` repro) showed
+  `TypeError: _glm_chat() missing 1 required keyword-only argument: 'model'`
+  on the **re-ask** call — the first call passed `model=`, the re-ask did
+  not, so the re-ask raised `TypeError`, which the pipeline's sanitiser
+  converted into a generic terminal failure.
+- **Root cause:** `_glm_chat` gained a required `model` keyword when the
+  vision/text models were threaded through (H-1); the re-ask call site was
+  missed.
+- **Solution:** The re-ask call passes `model=model`.
+- **Testing:** TC-RESP-01/02 (re-ask then typed permanent) pass; the
+  worker_error no longer appears for this path.
+
+### D-9 — pdfium rejected the test-factory PDFs (Sprint E2, 2026-10-13)
+
+- **Problem:** Scanned-PDF rasterization tests failed with
+  `PdfiumError: Failed to load page.` although pdfplumber parsed the same
+  bytes fine.
+- **Investigation:** pdfium is stricter about stream `/Length`: the test
+  factory emitted `/Length 0` for empty content streams while actually
+  writing a 1-byte newline as stream data.
+- **Root cause:** Off-by-one between the declared and actual stream length
+  in the test-factory PDF syntax.
+- **Solution:** `tests/conftest.py` now writes exact `/Length` with no
+  padding newline before `endstream`.
+- **Testing:** Scan-rasterize tests pass; pdfplumber-based tests unaffected.
 
 ## Refactoring (§21 requires at least one genuine area)
 

@@ -100,7 +100,10 @@ def _write_pdf(path, pages: int, text_lines: list[str] | None = None) -> bytes:
             f"/Contents {content_number} 0 R >>"
         ).encode()
         objects[content_number] = (
-            f"<< /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream"
+            # Exact /Length, no padding newline between data and endstream:
+            # pdfium (Sprint E2 rasterization) rejects a Length mismatch that
+            # pdfminer tolerates.
+            f"<< /Length {len(stream)} >>\nstream\n".encode() + stream + b"endstream"
         )
 
     out = bytearray(b"%PDF-1.4\n")

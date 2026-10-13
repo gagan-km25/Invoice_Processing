@@ -261,14 +261,22 @@ def detail(invoice_id: int):
 @bp.get("/invoices/<int:invoice_id>/original")
 def original(invoice_id: int):
     """Serve the stored source file. The stored name is server-generated and
-    send_from_directory refuses paths escaping the uploads directory."""
+    send_from_directory refuses paths escaping the uploads directory. The
+    MIME type follows the stored `file_type` (Sprint E2: images)."""
     record = _load(invoice_id)
     if record is None:
         abort(404)
+    extension = (record["stored_filename"] or "").rsplit(".", 1)[-1].lower()
+    if record["file_type"] == "image" and extension in ("jpg", "jpeg"):
+        mimetype = "image/jpeg"
+    elif record["file_type"] == "image":
+        mimetype = "image/png"
+    else:
+        mimetype = "application/pdf"
     return send_from_directory(
         current_app.config["UPLOAD_DIR"],
         record["stored_filename"],
-        mimetype="application/pdf",
+        mimetype=mimetype,
     )
 
 

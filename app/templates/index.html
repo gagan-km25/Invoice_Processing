@@ -2,10 +2,10 @@
 {% block content %}
 <section class="panel">
   <h2>Upload an invoice</h2>
-  <p class="hint">PDF only · up to {{ (config['MAX_CONTENT_LENGTH'] / (1024 * 1024))|int }} MB ·
-     up to {{ config['PAGE_LIMIT'] }} pages</p>
+  <p class="hint">PDF, JPG/JPEG or PNG · up to {{ (config['MAX_CONTENT_LENGTH'] / (1024 * 1024))|int }} MB ·
+     PDFs up to {{ config['PAGE_LIMIT'] }} pages</p>
   <form action="{{ url_for('uploads.upload') }}" method="post" enctype="multipart/form-data" class="upload-form">
-    <input type="file" name="file" accept=".pdf,application/pdf" required>
+    <input type="file" name="file" accept=".pdf,application/pdf,.jpg,.jpeg,image/jpeg,.png,image/png" required>
     <button type="submit">Upload</button>
   </form>
 </section>

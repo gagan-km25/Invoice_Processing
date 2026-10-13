@@ -355,7 +355,11 @@ class InvoiceWorker:
                     invoice_id=invoice_id,
                     error_class=type(exc).__name__,
                 )
-                self._fail_terminal(invoice_id, exc.user_message)
+                self._fail_terminal(
+                    invoice_id,
+                    exc.user_message,
+                    raw_response=getattr(exc, "raw_response", None),
+                )
                 return
             except sqlite3.OperationalError:
                 # Transient (lock) or non-transient DB error raised while
@@ -400,7 +404,9 @@ class InvoiceWorker:
             )
             return
 
-    def _fail_terminal(self, invoice_id: int, user_message: str) -> None:
+    def _fail_terminal(
+        self, invoice_id: int, user_message: str, raw_response: str | None = None
+    ) -> None:
         """Exactly one terminal failure transition + audit events."""
         try:
             conn = get_db()
@@ -423,6 +429,7 @@ class InvoiceWorker:
                     actor="system",
                     details=None,
                     error_message=user_message,
+                    raw_response=raw_response,
                 )
             finally:
                 conn.close()
