@@ -101,6 +101,9 @@ def _looks_like_non_vendor(first_line_low: str) -> bool:
     ):
         if _match_label(first_line_low, label_list):
             return True
+    if any(first_line_low.startswith(k) for k in labels.ITEM_HEADER_KEYWORDS):
+        return True  # item-table header cell (verified: 'Description' became
+        # the vendor on a real layout whose first table was the items table)
     return False
 
 
@@ -267,23 +270,37 @@ def build_fields(text: str, tables) -> dict:
     )
     fields["total"] = found(total, raw=total_val) if total is not None else missing()
 
-    # --- currency: symbols seen on amount values + GST context (finding 1) ---
-    symbols = [
-        detect_currency_symbol(value)
-        for value in (subtotal_val, discount_val, tax_val, total_val)
-        if value
-    ]
-    has_gst_context = (
-        fields["vendor_tax_id"]["status"] == "found"
-        or fields["tax"]["status"] == "found"
-    )
-    currency, status, evidence = resolve_currency(symbols, has_gst_context)
-    if status == "missing":
-        fields["currency"] = missing()
-    elif status == "ambiguous":
-        fields["currency"] = ambiguous(currency, evidence=evidence)
+    # --- currency: explicit label first (verified real layout: 'Currency:
+    # INR' with plain-number amounts), then symbols + GST context ---
+    label_value = find_labeled_value(lines, labels.CURRENCY_LABELS)
+    label_code = label_value.strip().upper() if label_value else None
+    if label_code and len(label_code) == 3 and label_code.isalpha():
+        fields["currency"] = found(label_code, raw=label_value)
+    elif label_value:
+        fields["currency"] = ambiguous(
+            None,
+            evidence=(
+                f"currency label present but value {label_value!r} is not a "
+                "3-letter code — please confirm"
+            ),
+        )
     else:
-        fields["currency"] = found(currency)
+        symbols = [
+            detect_currency_symbol(value)
+            for value in (subtotal_val, discount_val, tax_val, total_val)
+            if value
+        ]
+        has_gst_context = (
+            fields["vendor_tax_id"]["status"] == "found"
+            or fields["tax"]["status"] == "found"
+        )
+        currency, status, evidence = resolve_currency(symbols, has_gst_context)
+        if status == "missing":
+            fields["currency"] = missing()
+        elif status == "ambiguous":
+            fields["currency"] = ambiguous(currency, evidence=evidence)
+        else:
+            fields["currency"] = found(currency)
 
     return fields
 

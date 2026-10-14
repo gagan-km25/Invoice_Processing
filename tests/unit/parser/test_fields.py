@@ -140,3 +140,109 @@ def test_vendor_geometric_fallback_without_tables():
     text = "TAX INVOICE\nAcme Corporation\n1 Main Street\nTotal $5.00"
     fields = _fields(text, tables=[])
     assert fields["vendor"]["value"] == "Acme Corporation"
+
+
+# ------------------------------------------------- Sprint E6 parser fixes
+# Regression evidence for the two defects found during the isolated UI
+# session (CPS-INV-5099): missing explicit-currency-label support, and the
+# items-table header cell extracted as the vendor.
+
+CPS_TEXT = """CloudPeak Systems
+Bengaluru, Karnataka
+INVOICE
+Invoice Number: CPS-INV-5099
+Invoice Date: 2026-10-05
+Due Date: 2026-10-25
+GSTIN: 29WXYZA7890B1Z6
+Currency: INR
+Description Qty Unit Price Amount
+Cloud Server Subscription 3 INR 4,500.00 INR 13,500.00
+Database Hosting 2 INR 3,200.00 INR 6,400.00
+Backup Storage 5 INR 900.00 INR 4,500.00
+Security Monitoring 1 INR 2,800.00 INR 2,800.00
+Technical Support 4 INR 1,250.00 INR 5,000.00
+Subtotal INR 32,200.00
+Discount INR 1,250.00
+GST (18%) INR 5,571.00
+Total INR 36,521.00"""
+
+# pdfplumber's single table for that layout: the item table, whose first
+# cell is the header word "Description".
+CPS_TABLES = [[["Description", "Qty", "Unit Price", "Amount"],
+               ["Cloud Server Subscription", "3", "INR 4,500.00",
+                "INR 13,500.00"]]]
+
+
+def test_currency_label_found_with_plain_number_amounts():
+    """TC-E6-F01 — 'Currency: INR' is honored even when every amount is a
+    plain number without a glyph (verified defect on CPS-INV-5099)."""
+    fields = build_fields(CPS_TEXT, CPS_TABLES)
+    assert fields["currency"] == {"status": "found", "value": "INR",
+                                  "raw": "INR"}
+
+
+def test_currency_label_beats_symbol_inference():
+    """TC-E6-F02 — an explicit labeled code wins over glyph/GST inference
+    (deterministic precedence: label > symbol > context inference)."""
+    text = REALISTIC_TEXT + "\nCurrency: EUR"
+    fields = build_fields(text, [])
+    assert fields["currency"]["status"] == "found"
+    assert fields["currency"]["value"] == "EUR"
+
+
+def test_currency_label_invalid_value_is_ambiguous():
+    """TC-E6-F03 — a label whose value is not a 3-letter code never becomes
+    a guessed 'found': ambiguous with evidence, value None."""
+    text = REALISTIC_TEXT + "\nCurrency: dollars"
+    fields = build_fields(text, [])
+    assert fields["currency"]["status"] == "ambiguous"
+    assert fields["currency"]["value"] is None
+    assert "3-letter" in fields["currency"]["evidence"]
+
+
+def test_currency_without_label_or_glyph_stays_missing():
+    """TC-E6-F04 — plain-number amounts with no label/glyph keep the
+    documented pre-fix missing behavior (no guessed currency)."""
+    text = """INVOICE
+Acme Ltd Invoice No: A-1
+Invoice Date: 2026-01-02
+Subtotal 100.00
+Tax 8.00
+Total 108.00"""
+    fields = build_fields(text, [])
+    assert fields["currency"]["status"] == "missing"
+    assert fields["currency"]["value"] is None
+
+
+def test_symbol_amounts_still_resolve_without_label():
+    """TC-E6-F05 — pre-existing behavior preserved: '$' amounts resolve via
+    the symbol table when no label is present."""
+    text = """INVOICE
+Acme Ltd Invoice No: A-1
+Invoice Date: 2026-01-02
+Subtotal $100.00
+Tax $8.00
+Total $108.00"""
+    fields = build_fields(text, [])
+    assert fields["currency"] == {"status": "found", "value": "USD"}
+
+
+def test_items_table_header_cell_is_not_the_vendor():
+    """TC-E6-F06 — a layout whose first (only) table is the item table must
+    not yield 'Description' as the vendor; the geometric fallback finds the
+    real vendor line and flags it ambiguous (verified defect)."""
+    fields = build_fields(CPS_TEXT, CPS_TABLES)
+    assert fields["vendor"]["value"] == "CloudPeak Systems"
+    assert fields["vendor"]["status"] == "ambiguous"
+
+
+def test_vendor_table_after_items_table_still_found():
+    """TC-E6-F07 — when the items table comes first and a later table
+    carries the vendor cell, the guard skips the header cell and the real
+    vendor block is found."""
+    tables = [[["Description", "Qty", "Unit Price", "Amount"],
+               ["Item", "1", "5.00", "5.00"]],
+              SAMPLE_TABLE]
+    fields = build_fields(REALISTIC_TEXT, tables)
+    assert fields["vendor"]["status"] == "found"
+    assert fields["vendor"]["value"] == "TechNova Retail Pvt. Ltd."

@@ -90,4 +90,8 @@ ITEM_HEADER_PREFIXES = ("#",)
 
 ITEM_HEADER_KEYWORDS = ("description", "qty", "unit price", "amount")
 
+# Explicit currency label (e.g. "Currency: INR") — verified real layout
+# (CPS-INV-5099) prints plain-number amounts with no glyph, plus this label.
+CURRENCY_LABELS = ("currency code", "currency")
+
 GST_CONTEXT_PATTERN = "gstin"
