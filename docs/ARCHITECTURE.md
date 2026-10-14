@@ -101,31 +101,52 @@ re-extraction; Reprocess (T5/T5b) re-runs the pipeline.
 - `invoice_lines`: + `line_tax`.
 - `invoice_audit`: id, invoice_id (FK cascade), event_type, actor, details,
   created_at; indexed per invoice.
-- Status CHECK is **transitional**: 8 canonical states + deprecated v1
-  values `extracted`/`saved` so pre-enhancement code keeps working until E5
-  rewires review/save; a v3 tightening migration then removes them.
-  Authoritative control is the workflow machine, which only accepts the 8.
+- Status CHECK (Sprint E5, v3): the 8 canonical states only — the
+  deprecated v1 values `extracted`/`saved` were removed by the v3
+  tightening migration after review/save was rewired (save keeps a record
+  at `completed`; `saved` no longer exists). Authoritative control is the
+  workflow machine, which only accepts the 8.
 - Migration v1→v2 (implemented, `app/db/migrations.py`): standard SQLite
   table rebuild in one transaction with FKs off, status mapping
   (extracted/saved → completed; original kept in `legacy_status`), one
   `record_migrated` audit row per invoice, `foreign_key_check` gate,
   `user_version` stamp. Live DB is never migrated before a recorded copy
   rehearsal (passed 2026-10-12) and a timestamped backup.
+- Migration v2→v3 (implemented, E5): same rebuild discipline — rows still
+  carrying `extracted`/`saved` remap to `completed` (prior value recorded
+  in `legacy_status` when absent), one `record_migrated` audit row per
+  remapped invoice, `foreign_key_check` gate, `user_version = 3`. Copy
+  rehearsal passed 2026-10-14 (TC-MIG-V3-00/00b); live DB untouched.
 
-## 6. Roles and access map (planned E4; approved correction 4)
+## 6. Roles and access map (E4, implemented 2026-10-14; approved correction 4)
 
 Session role labels — **not authentication**; any browser user can switch
 roles; guards prevent wrong-role actions on a localhost single-user app.
 
+Route-map revision recorded at E4 implementation (approved planning
+amendment): `POST /invoices/<id>/submit` and `POST /session/role` were
+added to the original map. Implementation nuance: `GET /` stays reachable
+for approvers (the nav hides the Upload link instead of serving 403 for
+the home page); every guarded *action* returns 403 with zero database or
+audit writes.
+
 | Route | vendor (default) | approver:manager / finance |
 |---|---|---|
-| `GET /` upload form | ✅ | ❌ hidden |
+| `GET /` upload form | ✅ | nav-hidden (page reachable) |
 | `POST /upload` | ✅ | ❌ 403 |
+| `POST /session/role` | ✅ | ✅ (allowlist; unknown roles refused) |
 | `GET /invoices` list, `GET /invoices/<id>` detail, `/status`, `/original` | ✅ | ✅ view-only |
 | `GET /invoices/<id>/review` | ✅ | ❌ 403 |
 | `POST .../save`, `/reprocess`, `/delete` | ✅ | ❌ 403 |
+| `POST /invoices/<id>/submit` (§10 routing; NULL total refused) | ✅ | ❌ 403 |
 | `GET /approvals` | ❌ 403 | ✅ filtered to session role |
 | `POST .../approve`, `/reject` | ❌ 403 | ✅ role must match `approver_role` |
+
+Submittable states (E4 decision 3, carried through E5): only
+`completed` and `validation_failed`. The E4-era `saved` exclusion is
+superseded by E5's removal of the `saved` status altogether (review/save
+keeps a record at `completed`), per the §12 transition map in
+`workflow.TRANSITIONS`.
 
 Vendor visibility interpretation: the machine owner is the sole vendor, so
 "view submitted invoices" = the invoice list. Actor values in audit are

@@ -121,6 +121,37 @@ docs/SPRINT_PLAN.md + docs/ARCHITECTURE.md.
   (`_glm_chat` hardcoded it); the model is now threaded through and
   asserted. Recorded runs: **40 focused / 280 full**, all green
   (TEST_PLAN R-E2-4).
+- **Sprint E3 implementation (2026-10-13/14, genuine).** Claude Code
+  implemented the §8 business-validation engine (`app/services/
+  validation.py`, pure functions, Decimal arithmetic, inclusive
+  configurable tolerance, injectable "today"), duplicate classification
+  (`app/services/duplicates.py`), pipeline wiring (T2/T3 transitions),
+  the §6 extended fields end-to-end (GLM schema + coercion, persistence,
+  review form, detail panels), and the acceptance-evidence tests that the
+  acceptance review demanded (TC-E3-XF-*). The suite caught two genuine
+  defects during the build (D-10, D-11 below) and the implementation
+  surfaced the discount-equation conflict resolved by decision record
+  docs/15 (D-12). Accepted 2026-10-14 after a read-only acceptance audit.
+- **Sprint E4 implementation (2026-10-14, genuine).** Claude Code
+  implemented submission routing (one-transaction status + `approver_role`
+  + two audit entries), approve/reject with mandatory stored rejection
+  reasons, the session-role mechanism with the ARCHITECTURE §6 route-map
+  guards (403 with zero database/audit writes on every wrong-role
+  attempt — asserted directly against the database, not via HTTP codes),
+  and the role-filtered approval queue. An editing mistake during the
+  build (the `save_invoice` signature line clobbered by an insertion) was
+  caught immediately by `py_compile` and repaired before proceeding.
+  Accepted 2026-10-14.
+- **Sprint E5 implementation (2026-10-14, genuine).** Claude Code
+  implemented the all-status list with status filter and ID/Created
+  columns, the audit-timeline and escaped collapsed raw-response panels,
+  the save-flow rewire (save keeps the lifecycle status — `saved`
+  removed), the status-blind duplicate gate, the
+  `uploaded`/`processing` deletion guards, and the v3 schema-tightening
+  migration with copy-rehearsal source-preservation tests (TC-MIG-V3-00..06).
+  A test-side parameter-ordering bug was caught by the suite and fixed
+  (D-13). E5 closed at **414 passed / 0 failed**; the live database is
+  still v2 and upgrades only at the next authorised boot.
 
 ## Debugging (genuine cases — to be appended as they occur)
 
@@ -270,16 +301,121 @@ only if they occur.
   padding newline before `endstream`.
 - **Testing:** Scan-rasterize tests pass; pdfplumber-based tests unaffected.
 
+### D-10 — Discounted invoices failed the literal amount equation (Sprint E3, 2026-10-13)
+
+- **Problem:** With the E3 validation engine live, four of the five real
+  sample invoices (docs/07 samples 2–5) became `validation_failed` — each
+  off by exactly its discount — while the exploration doc said the
+  consistency math was "verified exact on all five".
+- **Investigation:** Recomputed both candidate equations with Decimal for
+  all five documented samples: `subtotal + tax` failed by exactly the
+  discount on every discounted invoice; `subtotal − discount + tax`
+  matched all five exactly (docs/07 finding 5 also records
+  `tax = (subtotal − discount) × rate`). The conflict was between the
+  assignment's literal §8.2 equation and the project's own Phase-A data.
+- **Root cause:** The approved severity mapping ("primary equation
+  mismatch → Error; discount-aware mismatch → Warning") had been
+  implemented as two independent always-on checks; the literal primary
+  check cannot hold for a correctly issued discounted invoice.
+- **Solution:** Applicable-equation model (decision record
+  docs/15 D-E3-01, user-approved): with discount absent/zero validate
+  `subtotal + tax = total` (Error); with discount non-zero validate
+  `subtotal − discount + tax = total` (Warning, never blocking). No
+  application change was made until the user approved the interpretation.
+- **Testing:** New unit tests pin both branches and the boundary
+  semantics (inclusive tolerance, no premature quantization); all five
+  real samples validate `passed` end-to-end (TC-S2-E01..E05).
+
+### D-11 — Non-numeric per-line tax was silently dropped (Sprint E3, 2026-10-13)
+
+- **Problem:** The E3 acceptance-evidence tests (written to prove US-E3-3)
+  failed: `TC-E3-XF-06/I05` expected a non-numeric `tax_{i}` to block the
+  save with a named field error, but the record saved anyway.
+- **Investigation:** `review.py::_validate_lines` computed
+  `line_tax = parse_amount(...)` without a `None` check — an unparseable
+  value became `None` and was stored, while every other decimal field
+  (quantity, unit price, amount, header amounts) blocks with a named
+  error per the Sprint 3 rule (AC-04.2).
+- **Root cause:** The per-line tax field was new in E3 and its guard was
+  omitted; the silent-drop path was never covered by a test until the
+  acceptance-evidence suite was added.
+- **Solution:** Stopped before fixing (user process): reported the defect
+  with the two red tests as evidence; on approval, added the 4-line
+  guard consistent with the sibling checks.
+- **Testing:** TC-E3-XF-06 and TC-E3-XF-I05 went red → green; full suite
+  357 passed at E3 close.
+
+### D-12 — E5 list query mixed placeholder order (Sprint E5, 2026-10-14)
+
+- **Problem:** `test_count_matches_listing` failed for the combined
+  status + search filter (`status='failed', q='beta'` returned 0).
+- **Investigation:** `list_invoices`/`count_invoices` appended the status
+  parameter *after* the search parameters, while the SQL placed the
+  `status = ?` placeholder *before* the search fragment — the values were
+  swapped.
+- **Root cause:** Parameter list and placeholder order were built in two
+  different orders.
+- **Solution:** The status value is now prepended so it matches the
+  placeholder position; a combined-filter test pins the ordering.
+- **Testing:** `test_history_repository.py` 14/14; full suite 414/0.
+
+### D-13 — `save_invoice` signature clobbered mid-edit (Sprint E4, 2026-10-14)
+
+- **Problem:** Inserting the three new E4 repository functions consumed
+  the `def save_invoice(` line, leaving an orphaned parameter list —
+  `py_compile` failed with `unmatched ')'`.
+- **Investigation:** Compile check immediately after the edit localised
+  the damage; the function inventory grep showed `save_invoice` missing.
+- **Root cause:** An Edit whose `old_string` matched the function's
+  signature line but whose replacement did not re-include it.
+- **Solution:** Re-inserted the signature; compile + function inventory
+  verified before any further work.
+- **Testing:** Full suite green at E4 close (397/0).
+
 ## Refactoring (§21 requires at least one genuine area)
 
-Nothing has been refactored yet beyond the Sprint E0 structure itself. The
-planned genuine refactoring is the Sprint E1/E2 extraction rework:
-`app/services/extraction.py` becomes the pipeline orchestrator over a
-pluggable extractor (GLM client + existing local parser fallback), which
-will be documented here when implemented.
+Genuine refactorings performed with Claude Code, beyond the Sprint E0/E1
+structure:
+
+- **Sprint E5 — lifecycle rewire and `saved` removal.** Review/save was
+  rewired so saving persists the confirmed values while the record keeps
+  its lifecycle status (`completed`); the transitional `saved` status was
+  removed end-to-end (save-flow, duplicate gate, history, delete policy,
+  and finally the schema CHECK via the v3 migration). All Sprint 3/4
+  saved-flow tests were deliberately redefined; the duplicate gate became
+  status-blind with self-exclusion; deletion moved from saved-only to
+  blocked-only-while-`uploaded`/`processing`.
+- **Sprint E3 — SQL moved back behind the repository seam.** The
+  duplicate classifier originally executed its candidate query inline;
+  the "all SQL lives in the repository" architecture rule was restored by
+  routing it through `repository.find_duplicate_candidates`.
+- **Sprint E4 — approval writes consolidated.** Submission and decisions
+  each write status + columns + audit entries in ONE transaction through
+  dedicated repository functions instead of ad-hoc multi-statement
+  sequences, mirroring the `transition_status` pattern.
 
 ## Code review (§21)
 
-A structured code review of the enhancement implementation is scheduled for
-Sprint E6 (and after each sprint's gate); findings will be recorded here
-verbatim, including any suggestions rejected and why.
+Structured read-only acceptance reviews were performed and their findings
+acted on after each sprint gate (all recorded in this file, TEST_PLAN and
+the sprint plan):
+
+- **E3 acceptance audit:** found the missing direct US-E3-3 persistence/
+  prefill evidence (closed with the TC-E3-XF suite), the dangling
+  "verification section below" reference and wording nits in docs/15
+  (fixed), and the line-tax defect D-11 (found by tests, fixed on
+  approval).
+- **E4 acceptance audit:** verified zero-write refusal proofs at
+  database level; found the E4 row's trailing empty table cell in
+  SPRINT_PLAN.md (cosmetic, still open) and confirmed the protected
+  documents' evidence chain (docs/14 provable only by mtime — stated
+  explicitly rather than claimed).
+- **E5 acceptance audit:** confirmed the migration's transaction/
+  rollback/fk-gate discipline by code and by disposable-copy tests; the
+  audit re-ran the full suite independently rather than trusting the
+  recorded count.
+- Rejected suggestions and why: refusing only `processing` from deletion
+  was extended to `uploaded` as well — but only as a user-approved
+  decision, not unilaterally; a stricter Error threshold for large
+  discount-aware deviations was declined as out-of-scope without a new
+  decision (docs/15 §5).

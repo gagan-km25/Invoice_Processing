@@ -40,8 +40,8 @@ Sprint E1's committed state it is marked "(met, E1)".
 | E2 — GLM extraction (text + vision), JPG/JPEG/PNG uploads, response validation | §4, §6, §7, §15 | US-E2-1..4 |
 | E3 — business validation, duplicate classification, extended invoice fields | §8, §9, §6 | US-E3-1..3 |
 | E4 — approval routing, roles, approve/reject actions | §10, §11, §3 (roles) | US-E4-1..3 |
-| E5 — invoice list/filter, detail panels, lifecycle polish | §14, §3.1 (visibility), §12/§13 (UI) | US-E5-1..4 |
-| E6 — verification, documentation, live smoke, demonstration | §16, §19, §20, §21, §23, §24 | US-E6-1..6 |
+| E5 — invoice list/filter, detail panels, lifecycle polish | §14, §3.1 (visibility), §12/§13 (UI) | US-E5-1..3 |
+| E6 — verification, documentation, live smoke, demonstration | §16, §19, §20, §21, §23, §24 | US-E6-1..5 |
 | Non-functional posture (quality, secrets, offline tests, migration safety, bounded failures) | §15, §17, §22 | US-NFR-1..5 |
 
 ---
@@ -244,15 +244,23 @@ extraction**
 
 ### 2.4 Sprint E3 — business validation, duplicates, extended fields (Planned — not started)
 
-**US-E3-1 (Planned) — Business validation with verdicts**
+**US-E3-1 (Done, accepted 2026-10-14) — Business validation with verdicts**
 - **User story:** As a user, I want every extracted invoice automatically
   validated after processing, so that invalid data cannot proceed silently
   and I can see exactly what is wrong.
 - **Acceptance criteria (planned, per assignment §8.1–8.5):**
   1. Mandatory-field validation: invoice number, invoice date, vendor
      name, currency, and total amount must be present (§8.1).
-  2. Amount validation: subtotal + tax = total, and the sum of line-item
-     totals = subtotal, within a configurable tolerance (§8.2).
+  2. Amount validation (§8.2; discount-aware rule per decision record
+     docs/15): when discount is absent or zero, validate
+     `subtotal + tax = total`; when discount is nonzero, validate
+     `subtotal − discount + tax = total` (docs/07 finding 5 — verified
+     exact on all five supplied invoices; docs/08 AC-04.7). In both cases
+     the sum of line-item totals must equal the subtotal. All comparisons
+     use Decimal arithmetic and the configured tolerance (default ₹0.01,
+     inclusive). Severity per approved decisions: a no-discount equation
+     mismatch is an Error (Failed); a discount-aware equation mismatch is
+     a Warning (E-16 flag-don't-block) — never blocks processing.
   3. Date validation: invoice date ≤ today, due date ≥ invoice date
      (§8.3).
   4. GSTIN format validation when present (§8.4).
@@ -261,7 +269,7 @@ extraction**
   6. ≥20 unit tests + integration test TC-VAL-INT-01.
 - **Priority:** Must. **Dependencies:** US-E1-1, US-E2-1/2.
 
-**US-E3-2 (Planned) — Duplicate classification with explanations**
+**US-E3-2 (Done, accepted 2026-10-14) — Duplicate classification with explanations**
 - **User story:** As a user, I want probable duplicates detected,
   classified as No Duplicate / Possible Duplicate / Exact Duplicate, and
   explained with the matching records named, so that I can decide instead
@@ -274,7 +282,8 @@ extraction**
 - **Note:** the baseline duplicate *warning* (legacy AC-4.2) is preserved;
   E3 adds the §9 classification layer on top.
 
-**US-E3-3 (Planned) — Extended invoice fields (§6)**
+**US-E3-3 (Implemented — acceptance evidence complete 2026-10-13) —
+Extended invoice fields (§6)**
 - **User story:** As a user, I want PO number, bill-to name and address,
   ship-to name and address, vendor GSTIN, and per-line tax extracted,
   validated, editable, and stored, so that Section 6 is fully covered.
@@ -282,71 +291,99 @@ extraction**
   prompt/schema and the local parser where extractable; (2) strict
   validation for each; (3) editable in the review form; (4) persisted
   (columns exist since E0); (5) prefill + persistence tests.
+- **Evidence (TC-E3-XF-*):** extraction mapping (unit, GLM response →
+  draft), prefill (XF-01/I03), save persistence + reload round-trip
+  (XF-I04), absent-field NULL handling (XF-I02), strict validation
+  (XF-02/06, I05). The evidence tests initially exposed a defect (a
+  non-numeric `tax_{i}` silently dropped instead of blocked); fixed and
+  verified 2026-10-13 — XF-06/I05 green, full suite 357 passed.
 - **Priority:** Must. **Dependencies:** US-E2-1/2, US-E0-2 (columns exist).
 
 ### 2.5 Sprint E4 — approval workflow (Planned — not started)
 
-**US-E4-1 (Partial) — Approval routing**
+**US-E4-1 (Accepted 2026-10-14) — Approval routing**
 - **User story:** As the system, I want invoices routed by amount
   (< ₹1,00,000 → manager; ≥ ₹1,00,000 → finance) when they are submitted
   for approval, so that the right role acts.
 - **Acceptance criteria:** (1) **met:** the routing rule is implemented and
   unit-tested at the ₹1,00,000 boundary (TC-APPR-ROUTE-01..04,
-  `workflow.required_approver`); (2) **pending (E4):** routing wired into
-  the submit flow with the `approval_assigned` audit event.
+  `workflow.required_approver`); (2) **met (E4):** routing wired into the
+  vendor submit flow (TC-APPR-SUB-01/02) with `approver_role` persisted and
+  `review_submitted` + `approval_assigned` audited in one transaction.
+  NULL totals refuse submission with a clear message (never default to
+  Finance); only `completed`/`validation_failed` are submittable — `saved`
+  stays outside the flow; double submission refused with zero writes.
 - **Priority:** Must. **Dependencies:** US-E3-1, US-E0-4 (met).
 
-**US-E4-2 (Planned) — Role mechanism with documented limits**
+**US-E4-2 (Accepted 2026-10-14) — Role mechanism with documented limits**
 - **User story:** As an approver, I want a session role so that approval
   actions are restricted to the matching role — documented honestly as a
   workflow mechanism, not authentication.
-- **Acceptance criteria (planned):** TC-ROLE-01..14 (vendor and mismatched
-  approver refused with no state change or audit write; queue filtered by
-  role; limits documented).
+- **Acceptance criteria — met:** session roles (`vendor` default,
+  `approver:manager`, `approver:finance`) switched via `POST /session/role`
+  (allowlist; unknown refused); the ARCHITECTURE §6 route map is enforced
+  (vendor review/save/reprocess/delete/upload and vendor queue access →
+  403; approvers cannot use vendor actions → 403) with **zero-write proof**
+  for every refusal (status + audit counts asserted directly, TC-ROLE-* in
+  `tests/integration/test_e4_approval_flow.py`); the queue is filtered to
+  the session role; limits documented in ARCHITECTURE §6.
 - **Priority:** Must. **Dependencies:** US-E4-1.
 
-**US-E4-3 (Planned) — Approve, reject, and rejection reason**
+**US-E4-3 (Accepted 2026-10-14) — Approve, reject, and rejection reason**
 - **User story:** As an approver, I want to approve or reject a pending
   invoice — rejecting requires a reason — so that decisions are recorded
   and irreversible without a fresh submission.
-- **Acceptance criteria (planned):** (1) only `pending_approval` is
-  actionable; (2) role must match `approver_role`; (3) rejection reason
-  mandatory, stored, and displayed; (4) T10/T11 audited;
-  Approved→Approved/Rejected refused. Tests TC-APPR-ACT/REJ-*.
+- **Acceptance criteria — met:** (1) only `pending_approval` is
+  actionable (TC-APPR-ACT-03: Approved→Approved/Rejected refused with zero
+  writes); (2) role must match `approver_role` (TC-APPR-ACT-01, 403 +
+  zero writes); (3) rejection reason mandatory, stored (`rejection_reason`),
+  and displayed on the detail page, with `acted_by`/`acted_at` recorded
+  (TC-APPR-REJ-01/02); (4) T10/T11 audited; each decision writes status +
+  columns + audit in ONE transaction.
 - **Priority:** Must. **Dependencies:** US-E4-1/2, US-E0-4.
 
 ### 2.6 Sprint E5 — views and lifecycle polish (Planned — not started)
 
-**US-E5-1 (Planned) — Invoice list with status filter and ID column**
+**US-E5-1 (Done, implemented 2026-10-14) — Invoice list with status filter and ID column**
 - **User story:** As a user, I want the invoice list to show all invoices
   with a status filter and the invoice ID, so that I can find and track
   any record.
-- **Acceptance criteria (planned):** TC-LIST-* (filter by each status; ID
-  column shown).
+- **Acceptance criteria — met:** TC-LIST-01 (exact-status filter),
+  TC-LIST-02 (all statuses listed), TC-LIST-03 (filter + search compose),
+  TC-LIST-04 (ID links + Created column), TC-LIST-05 (bogus filter
+  ignored) — `tests/integration/test_e5_views.py`.
 - **Priority:** Must. **Dependencies:** US-E1-2.
 
-**US-E5-2 (Planned) — Detail panels and vendor visibility**
+**US-E5-2 (Done, implemented 2026-10-14) — Detail panels and vendor visibility**
 - **User story:** As a vendor, I want one detail page showing my invoice's
   processing status, extracted information (all Section 6 fields),
   validation errors/warnings, duplicate warnings, approval state, audit
   timeline, and final status, so that I always know exactly where it
   stands.
-- **Acceptance criteria (planned):** TC-DETAIL-* covering every panel;
-  raw response collapsed and escaped (TC-RAW-02 UI half moves here).
+- **Acceptance criteria — met:** TC-DETAIL-01 (audit timeline, ordered,
+  with actor), TC-RAW-02 UI half (raw response collapsed + HTML-escaped,
+  never while processing; TC-DETAIL-02/03), TC-DETAIL-04 (vendor and
+  approver visibility per the §6 route map). Validation/duplicate/
+  approval panels were delivered by E3/E4.
 - **Priority:** Must. **Dependencies:** US-E3-1/2, US-E4-3, US-E1-4.
 
-**US-E5-3 (Planned) — Delete policy and schema tightening**
+**US-E5-3 (Done, implemented 2026-10-14) — Delete policy and schema tightening**
 - **User story:** As the system, I want deletion blocked while
   `processing` and the transitional status values removed once review/save
   is rewired, so that the lifecycle stays clean.
-- **Acceptance criteria (planned):** delete-guard tests; v3 migration
-  dropping the deprecated `extracted`/`saved` CHECK values with its own
-  tests.
+- **Acceptance criteria — met:** deletion blocked while `uploaded` or
+  `processing` (approved decision 1) with zero-write refusals
+  (TC-S4-I22 redefined, TC-S4-U12); review/save rewired — save persists
+  values and keeps the lifecycle status, the duplicate gate is
+  status-blind (TC-S3-I12/I14/I19 redefined); v3 migration drops the
+  `extracted`/`saved` CHECK values, remaps stragglers to `completed` with
+  `legacy_status` + `record_migrated`, fk-gate + idempotency + shape-
+  parity + copy-rehearsal source-preservation evidence (TC-MIG-V3-00..06).
 - **Priority:** Must. **Dependencies:** US-E1-1, US-E3-*, US-E4-*.
 
 ### 2.7 Sprint E6 — verification, documentation, demonstration (Planned — not started)
 
-**US-E6-1 (Planned) — Full regression and negative-test inventory**
+**US-E6-1 (Partial — inventory recorded; final re-record pending) — Full regression and negative-test inventory**
 - **User story:** As a reviewer, I want the complete suite rerun and the
   §16 negative-test inventory (unsupported file, empty file, invalid
   invoice data, missing mandatory field, invalid GSTIN, wrong total,
@@ -358,9 +395,13 @@ extraction**
   an explicitly scheduled owner; (3) results recorded in TEST_PLAN.
 - **Priority:** Must (assignment §16/§24).
 - **Dependencies:** US-E1-1..6, US-E2-1..3, US-E3-1..3, US-E4-1..3.
-- **Status/evidence:** none yet — planned.
+- **Status/evidence (partial, 2026-10-14):** the §16 negative-case and
+  integration-flow coverage maps are recorded in TEST_PLAN (each of the
+  11 negative areas maps to named, passing tests); the latest full-suite
+  record is 414 passed / 0 failed (E5). Remaining: the final E6-close
+  re-record of the suite.
 
-**US-E6-2 (Planned) — Documentation finalisation**
+**US-E6-2 (Partial — final sweep pending) — Documentation finalisation**
 - **User story:** As a reviewer, I want TEST_PLAN and KNOWN_ISSUES
   finalised with only recorded results, so that documentation claims stay
   auditable against executed evidence.
@@ -369,10 +410,12 @@ extraction**
   KNOWN_ISSUES entries carry status and mitigation.
 - **Priority:** Must (assignment §19/§24).
 - **Dependencies:** US-E6-1; the sprint entries P-E-15..P-E-26.
-- **Status/evidence:** partial precursors exist (TEST_PLAN/KNOWN_ISSUES
-  current through Sprint E2).
+- **Status/evidence (partial, 2026-10-14):** the E6 final-accuracy
+  checklist is recorded in TEST_PLAN; README rewritten; REQUIREMENTS
+  reconciled (inventory + statuses); §16/§24 mappings recorded.
+  Remaining: executing and ticking off the checklist at E6 close.
 
-**US-E6-3 (Planned) — CLAUDE_USAGE.md completion**
+**US-E6-3 (Partial — E3–E5 entries recorded; final review pending) — CLAUDE_USAGE.md completion**
 - **User story:** As a reviewer, I want CLAUDE_USAGE.md completed with
   genuine evidence only (implementation, debugging, review cycles as they
   actually occurred), so that the Claude Code record remains trustworthy.
@@ -382,11 +425,13 @@ extraction**
 - **Priority:** Must (assignment §21).
 - **Dependencies:** the sprint interactions it records (P-E-15..P-E-26
   exist; later entries pending).
-- **Status/evidence:** partial — genuine entries through Sprint E2
-  (implementation bullet, debugging D-5..D-9); sections for later sprints
-  marked pending.
+- **Status/evidence (partial, 2026-10-14):** genuine entries through
+  Sprint E5 — implementation bullets E0–E5, debugging D-1..D-13,
+  refactoring (E5 lifecycle rewire, E3 repository seam, E4 write
+  consolidation), and per-sprint code-review records. Remaining: the
+  final E6 review entry at close.
 
-**US-E6-4 (Planned) — End-to-end demonstration and walkthrough**
+**US-E6-4 (Planned — script drafted; run pending authorisation) — End-to-end demonstration and walkthrough**
 - **User story:** As a reviewer, I want a recorded functional
   demonstration (upload → processing → review → submit → approve; reject;
   duplicate; live smoke), the technical walkthrough (architecture, DB
@@ -400,9 +445,11 @@ extraction**
   implementation, debugging, refactoring, and review.
 - **Priority:** Must (assignment §23).
 - **Dependencies:** US-E2-4 (live smoke), US-E3-*, US-E4-*, US-E5-*.
-- **Status/evidence:** none yet — planned.
+- **Status/evidence:** the three-part script is drafted in docs/16
+  (9 [RECORD] steps; nothing claimed complete). The run requires
+  app-launch and live-smoke authorisation.
 
-**US-E6-5 (Planned) — Traceability matrix completion**
+**US-E6-5 (Partial — matrix reconciled; live/demo rows open) — Traceability matrix completion**
 - **User story:** As a reviewer, I want all 21 acceptance criteria
   evidenced with no unchecked claims, so that the final acceptance claim
   is fully supported.
@@ -461,31 +508,31 @@ logging**
 
 | AC | Criterion (abridged) | Covered by | Status |
 |---|---|---|---|
-| 1 | Application enhanced | E0–E6 collectively | **Partial** — E0/E1 committed; E2 tested (uncommitted); E3–E6 pending |
-| 2 | Required file types | US-E2-3 | **Done (tested, uncommitted)** — offline-tested; live vision path awaits smoke |
+| 1 | Application enhanced | E0–E6 collectively | **Done (E0–E5 implemented and accepted; uncommitted)** — remaining: E6 documentation/demo finalisation and the commit series (AC-20) |
+| 2 | Required file types | US-E2-3 | **Done (offline-tested)** — live vision path awaits the recorded smoke (US-E2-4) |
 | 3 | Upload does not block | US-E1-2 | **PASS** (TC-ASYNC-01) |
 | 4 | Processing status available | US-E1-2 | **PASS** (TC-ASYNC-02) |
 | 5 | AI extraction structured | US-E2-1/2 | **Done (offline-tested)** — live smoke pending (US-E2-4) |
 | 6 | Invalid AI responses handled | US-E2-2 | **Done (offline-tested)** |
 | 7 | Extraction failures handled | US-E1-3 | **PASS** (TC-PIPE-FAIL-*) |
-| 8 | Business validation | US-E3-1 | **Pending** (E3) |
-| 9 | Duplicate classification | US-E3-2 | **Pending** (E3) |
-| 10 | Approval routing | US-E4-1 | **Partial** (rule unit-tested; wiring E4) |
-| 11 | Approve/reject actions | US-E4-3 | **Pending** (E4) |
-| 12 | Rejection reason captured | US-E4-3 | **Pending** (E4) |
-| 13 | Status transitions controlled | US-E0-4/US-E1-1 | **PASS** (TC-SM-*) |
-| 14 | Audit history | US-E0-4/US-E1-4/US-E5-2 | **Partial** (events done; timeline UI E5) |
-| 15 | List/detail/filtering | US-E5-1/2 | **Partial** (detail all-status done in E1; filter/panels E5) |
+| 8 | Business validation | US-E3-1 | **Done (E3, accepted)** — TC-E3-V/D/U-*, validation unit suite 33, real samples TC-S2-E01..E05; discount rule recorded in docs/15 |
+| 9 | Duplicate classification | US-E3-2 | **Done (E3; gate rewired E5)** — 19 unit tests (20 before the E5 `saved` case was removed) + 3 integration tests; status-blind save gate (TC-S3-I14/I19) |
+| 10 | Approval routing | US-E4-1 | **Done (E4, accepted)** — TC-APPR-ROUTE-01..04 boundary; TC-APPR-SUB-01..04 flow incl. NULL-total refusal |
+| 11 | Approve/reject actions | US-E4-3 | **Done (E4, accepted)** — TC-APPR-ACT-01..03, TC-ROLE-* (zero-write refusals) |
+| 12 | Rejection reason captured | US-E4-3 | **Done (E4, accepted)** — TC-APPR-REJ-01/02 (mandatory, stored, displayed) |
+| 13 | Status transitions controlled | US-E0-4/US-E1-1 | **PASS** (TC-SM-*) — extended by E4 terminal-state tests (TC-APPR-ACT-03) |
+| 14 | Audit history | US-E0-4/US-E1-4/US-E5-2 | **Done (E5)** — events recorded since E0/E1; audit-timeline UI delivered (TC-DETAIL-01) |
+| 15 | List/detail/filtering | US-E5-1/2 | **Done (E5)** — TC-LIST-01..05, TC-DETAIL-01..04, TC-RAW-02 UI half |
 | 16 | Safe error handling & logging | US-E1-5 | **PASS** (TC-ERR/LOG/KEY/RAW) |
-| 17 | Automated tests | all sprints | **PASS** — 280 passed (recorded) |
-| 18 | SDLC documentation | US-E0-5/US-E6-2 | **Partial** (canonical docs current; E6 finalisation pending) |
-| 19 | Claude Code usage documented | US-E6-3 | **Partial** (genuine entries through E2; ongoing) |
-| 20 | Git practices | US-E0-1 + sprint discipline | **PASS** (explicit-path staging; E0/E1 commits) |
-| 21 | End-to-end demonstration | US-E6-4 | **Not verified** (E6) |
+| 17 | Automated tests | all sprints | **PASS** — 414 passed / 0 failed (recorded at E5 acceptance; the final count will be re-recorded at E6 completion) |
+| 18 | SDLC documentation | US-E0-5/US-E6-2 | **Partial** — all §19 documents exist and are current through E5; final accuracy sweep + §16/§24 mappings recorded this revision |
+| 19 | Claude Code usage documented | US-E6-3 | **Partial** — genuine entries through E2; E3–E5 events identified this revision, being appended |
+| 20 | Git practices | US-E0-1 + sprint discipline | **Partial** — explicit-path staging discipline held, but E2–E5 work is uncommitted by user instruction; commit series requires authorisation |
+| 21 | End-to-end demonstration | US-E6-4 | **Not verified** — demo script drafted (docs/16); run requires app-launch + live-smoke authorisation |
 
-**Known gaps:** AC-8, AC-9, AC-10/11/12 wiring, AC-14/15 UI halves, AC-21 —
-all scheduled E3–E6. Extended §6 fields (PO/ship-to/per-line tax) land
-with US-E3-3.
+**Known gaps (remaining, all authorisation-gated):** AC-2/5 live GLM smoke;
+AC-21 demonstration run; AC-20 commit series. No offline criterion is
+pending.
 
 ---
 
