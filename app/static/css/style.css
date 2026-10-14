@@ -93,6 +93,21 @@ main { max-width: 60rem; margin: 0 auto; padding: 1.5rem; }
 .status-extracted { border-color: var(--warn); color: var(--warn); }
 .status-saved { border-color: var(--ok); color: var(--ok); }
 .status-failed { border-color: var(--err); color: var(--err); }
+.status-processing { border-color: var(--accent); color: var(--accent); }
+.status-completed { border-color: var(--ok); color: var(--ok); }
+.status-validation_failed { border-color: var(--err); color: var(--err); }
+.status-pending_approval { border-color: var(--warn); color: var(--warn); }
+.status-approved { border-color: var(--ok); color: var(--ok); }
+.status-rejected { border-color: var(--err); color: var(--err); }
+
+/* Role switcher + approval forms (Sprint E4) */
+.role-switch { margin-top: 0.25rem; font-size: 0.8rem; }
+.role-label { color: var(--muted); margin-right: 0.5rem; }
+.role-switch button { margin-right: 0.25rem; }
+.role-switch button.role-active {
+  border-color: var(--accent); color: var(--accent); cursor: default;
+}
+.reject-form textarea { width: 100%; margin: 0.25rem 0 0.5rem; }
 
 .empty-state { color: var(--muted); }
 

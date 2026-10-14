@@ -33,10 +33,19 @@ def create_app(config_object=Config) -> Flask:
     # SQLite schema (idempotent — safe on every boot).
     init_db(app)
 
-    from app.routes import invoices, uploads
+    from app.routes import approvals, invoices, session, uploads
 
     app.register_blueprint(uploads.bp)
     app.register_blueprint(invoices.bp)
+    app.register_blueprint(approvals.bp)
+    app.register_blueprint(session.bp)
+
+    @app.context_processor
+    def inject_current_role():
+        """Session role available to every template (nav switcher, guards)."""
+        from app.services.roles import ALL_ROLES, current_role
+
+        return {"current_role": current_role, "role_choices": ALL_ROLES}
 
     # Background pipeline (Sprint E1): single serial worker. Recovery runs
     # at every boot; the thread only starts when WORKER_AUTOSTART is set

@@ -60,6 +60,10 @@
       {{ header_field('due_date', 'Due date', 'date') }}
       {{ header_field('currency', 'Currency (e.g. INR)') }}
       {{ header_field('bill_to', 'Bill to') }}
+      {{ header_field('bill_to_address', 'Bill to address') }}
+      {{ header_field('ship_to_name', 'Ship to name') }}
+      {{ header_field('ship_to_address', 'Ship to address') }}
+      {{ header_field('po_number', 'PO number') }}
       {{ header_field('subtotal', 'Subtotal *') }}
       {{ header_field('discount', 'Discount') }}
       {{ header_field('tax', 'Tax amount') }}
@@ -73,7 +77,7 @@
       <thead>
         <tr>
           <th>Remove</th><th class="col-desc">Description</th>
-          <th>Quantity</th><th>Unit price</th><th>Amount</th>
+          <th>Quantity</th><th>Unit price</th><th>Amount</th><th>Tax</th>
         </tr>
       </thead>
       <tbody>
@@ -98,6 +102,9 @@
           <td>
             <input name="amount_{{ row['i'] }}" inputmode="decimal" value="{{ row['amount'] }}">
             {% if errors.get('amount_' ~ row['i']) %}<div class="error-text">{{ errors['amount_' ~ row['i']] }}</div>{% endif %}
+          </td>
+          <td>
+            <input name="tax_{{ row['i'] }}" inputmode="decimal" value="{{ row['tax'] }}">
           </td>
         </tr>
         {% endfor %}

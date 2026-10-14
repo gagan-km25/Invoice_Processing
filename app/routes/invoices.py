@@ -25,15 +25,17 @@ from flask import (
 
 from app.db import get_db
 from app.db.repository import (
-    count_saved,
+    count_invoices,
     find_by_hash,
-    find_saved_duplicates,
+    find_duplicate_records,
+    get_audit,
     get_invoice,
     get_lines,
-    list_saved,
+    list_invoices,
     save_invoice,
 )
-from app.services.invoices import delete_saved_invoice
+from app.services import approvals
+from app.services.invoices import delete_invoice_record
 from app.services.pipeline import JOB_REPROCESS
 from app.services.review import (
     form_to_view,
@@ -41,6 +43,7 @@ from app.services.review import (
     validate_and_merge,
     with_blank_rows,
 )
+from app.services.roles import ROLE_VENDOR, current_role
 
 REVIEWABLE = ("extracted", "completed")
 
@@ -71,17 +74,16 @@ def _draft_of(record) -> dict:
     return json.loads(record["extraction_json"])
 
 
-def _saved_hash_duplicates(record) -> list:
+def _hash_duplicates(record) -> list:
+    """Other records with the same file content, in any status, excluding
+    this record (Sprint E5 rewire — duplicate detection is status-blind)."""
     conn = get_db()
     try:
-        duplicates = [
-            row
-            for row in find_by_hash(conn, record["file_hash"], exclude_id=record["id"])
-            if row["status"] == "saved"
-        ]
+        return list(
+            find_by_hash(conn, record["file_hash"], exclude_id=record["id"])
+        )
     finally:
         conn.close()
-    return duplicates
 
 
 @bp.get("/invoices/<int:invoice_id>/status")
@@ -105,6 +107,8 @@ def reprocess(invoice_id: int):
     validation-failed) invoice. The route only guards + enqueues; the
     worker's claim ladder performs T5/T5b and audits `reprocess_requested`
     in the same transaction as the status change."""
+    if current_role() != ROLE_VENDOR:
+        abort(403)  # route map: reprocess is a vendor action (ARCHITECTURE §6)
     record = _load(invoice_id)
     if record is None:
         abort(404)
@@ -120,8 +124,39 @@ def reprocess(invoice_id: int):
     return redirect(url_for("invoices.detail", invoice_id=invoice_id))
 
 
+@bp.post("/invoices/<int:invoice_id>/submit")
+def submit(invoice_id: int):
+    """Submit a completed (or validation-failed) invoice for approval
+    (Sprint E4, assignment §10): route by amount and persist
+    `approver_role` + audits in one transaction. Vendor-only per the
+    route map; NULL totals are refused (routing needs the amount —
+    approved decision 1, never default to Finance)."""
+    if current_role() != ROLE_VENDOR:
+        abort(403)  # route map: submission is a vendor action
+    record = _load(invoice_id)
+    if record is None:
+        abort(404)
+    threshold = current_app.config["APPROVAL_THRESHOLD"]
+    conn = get_db()
+    try:
+        result = approvals.submit(conn, invoice_id, threshold=threshold)
+    finally:
+        conn.close()
+    if result["ok"]:
+        flash(
+            f"Record #{invoice_id} submitted — routed to the "
+            f"{result['approver_role']} approver.",
+            "success",
+        )
+    else:
+        flash(result["error"], "warning")
+    return redirect(url_for("invoices.detail", invoice_id=invoice_id))
+
+
 @bp.get("/invoices/<int:invoice_id>/review")
 def review(invoice_id: int):
+    if current_role() != ROLE_VENDOR:
+        abort(403)  # route map: review is a vendor action (ARCHITECTURE §6)
     record = _load(invoice_id)
     if record is None:
         abort(404)
@@ -147,6 +182,8 @@ def review(invoice_id: int):
 
 @bp.post("/invoices/<int:invoice_id>/save")
 def save(invoice_id: int):
+    if current_role() != ROLE_VENDOR:
+        abort(403)  # route map: save is a vendor action (ARCHITECTURE §6)
     record = _load(invoice_id)
     if record is None:
         abort(404)
@@ -172,12 +209,13 @@ def save(invoice_id: int):
             dup_ids=[],
         ), 400
 
-    # Duplicate gate (US-S3-06): saved records with the same vendor + number,
-    # or the same file content, require explicit confirmation.
+    # Duplicate gate (US-S3-06, rewired Sprint E5): other records with the
+    # same vendor + number, or the same file content, in any status,
+    # require explicit confirmation.
     header = result["data"]["header"]
     conn = get_db()
     try:
-        duplicates = find_saved_duplicates(
+        duplicates = find_duplicate_records(
             conn,
             header.get("vendor") or "",
             header.get("invoice_number") or "",
@@ -185,7 +223,7 @@ def save(invoice_id: int):
         )
     finally:
         conn.close()
-    duplicates = list(duplicates) + _saved_hash_duplicates(record)
+    duplicates = list(duplicates) + _hash_duplicates(record)
     if duplicates and not request.form.get("confirm_duplicate"):
         values, line_rows = form_to_view(request.form)
         dup_ids = sorted({row["id"] for row in duplicates})
@@ -220,23 +258,29 @@ def save(invoice_id: int):
 
 @bp.get("/invoices")
 def history():
-    """Saved invoices only, newest first, optional search, minimal paging."""
+    """All invoices (Sprint E5, assignment §14), optional exact-status
+    filter and search, newest invoice date first, minimal paging."""
     q = (request.args.get("q") or "").strip()
+    status = request.args.get("status") or None
+    if status not in current_app.config["INVOICE_STATUSES"]:
+        status = None  # unknown filter values are ignored, not errors
     try:
         page = max(1, int(request.args.get("page", 1)))
     except ValueError:
         page = 1
     conn = get_db()
     try:
-        rows = list_saved(conn, q=q or None, limit=PAGE_SIZE,
-                          offset=(page - 1) * PAGE_SIZE)
-        total = count_saved(conn, q=q or None)
+        rows = list_invoices(conn, status=status, q=q or None,
+                             limit=PAGE_SIZE, offset=(page - 1) * PAGE_SIZE)
+        total = count_invoices(conn, status=status, q=q or None)
     finally:
         conn.close()
     return render_template(
         "history.html",
         rows=rows,
         q=q,
+        status=status,
+        statuses=current_app.config["INVOICE_STATUSES"],
         total=total,
         page=page,
         pages=max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE),
@@ -246,16 +290,45 @@ def history():
 @bp.get("/invoices/<int:invoice_id>")
 def detail(invoice_id: int):
     """Invoice detail — available for every status since Sprint E1 (the
-    upload redirect lands here so processing progress is visible)."""
+    upload redirect lands here so processing progress is visible).
+    Sprint E3: business-validation verdict/findings and duplicate
+    classification. Sprint E5: audit timeline and the retained raw
+    provider response (collapsed + escaped, never while processing)."""
     record = _load(invoice_id)
     if record is None:
         abort(404)
     conn = get_db()
     try:
         lines = get_lines(conn, invoice_id)
+        audit_entries = get_audit(conn, invoice_id)
     finally:
         conn.close()
-    return render_template("detail.html", invoice=record, lines=lines)
+
+    def _json_column(raw):
+        if not raw:
+            return []
+        try:
+            parsed = json.loads(raw)
+        except ValueError:
+            return []
+        return parsed if isinstance(parsed, list) else []
+
+    validation_findings = _json_column(record["validation_json"])
+    dup_matches = _json_column(record["dup_matches"])
+    raw_response = (
+        record["raw_response"]
+        if record["status"] not in ("uploaded", "processing")
+        else None
+    )
+    return render_template(
+        "detail.html",
+        invoice=record,
+        lines=lines,
+        validation_findings=validation_findings,
+        dup_matches=dup_matches,
+        audit_entries=audit_entries,
+        raw_response=raw_response,
+    )
 
 
 @bp.get("/invoices/<int:invoice_id>/original")
@@ -282,18 +355,21 @@ def original(invoice_id: int):
 
 @bp.post("/invoices/<int:invoice_id>/delete")
 def delete(invoice_id: int):
-    """POST-only, confirmation-required deletion of saved invoices.
+    """POST-only, confirmation-required deletion (Sprint E5 policy:
+    blocked while `uploaded`/`processing`, allowed otherwise).
     GET requests never reach this route (405) and never delete."""
+    if current_role() != ROLE_VENDOR:
+        abort(403)  # route map: delete is a vendor action (ARCHITECTURE §6)
     record = _load(invoice_id)
     if record is None:
         abort(404)
-    if record["status"] != "saved":
+    if record["status"] in ("uploaded", "processing"):
         flash(
-            f"Record #{invoice_id} is {record['status']} — only saved "
-            "invoices can be deleted.",
+            f"Record #{invoice_id} is {record['status']} — it cannot be "
+            "deleted while queued or processing.",
             "warning",
         )
-        return redirect(url_for("uploads.index"))
+        return redirect(url_for("invoices.detail", invoice_id=invoice_id))
 
     if not request.form.get("confirm_delete"):
         conn = get_db()
@@ -305,8 +381,8 @@ def delete(invoice_id: int):
             "confirm_delete.html", invoice=record, lines=lines
         )
 
-    ok, message = delete_saved_invoice(invoice_id)
+    ok, message = delete_invoice_record(invoice_id)
     flash(message, "success" if ok else "error")
     if ok:
         return redirect(url_for("invoices.history"))
-    return redirect(url_for("uploads.index"))
+    return redirect(url_for("invoices.detail", invoice_id=invoice_id))

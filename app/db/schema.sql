@@ -46,10 +46,8 @@ CREATE TABLE IF NOT EXISTS invoices (
                       CHECK (status IN (
                           'uploaded', 'processing', 'completed',
                           'validation_failed', 'pending_approval',
-                          'approved', 'rejected', 'failed',
-                          -- deprecated v1 aliases, transitional only:
-                          'extracted', 'saved')),
-    legacy_status     TEXT,                    -- pre-migration status (v2 only)
+                          'approved', 'rejected', 'failed')),
+    legacy_status     TEXT,                    -- pre-migration status (set by migrations)
     extraction_json   TEXT,                    -- per-field status/source draft
     raw_response      TEXT,                    -- AI raw response, size-capped (E2)
     validation_status TEXT,                    -- passed | warning | failed (E3)

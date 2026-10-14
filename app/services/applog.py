@@ -33,6 +33,8 @@ ALLOWED_EVENT_FIELDS = frozenset({
     "from_status",
     "to_status",
     "status",
+    "verdict",
+    "classification",
     "reason",
     "attempts",
     "error_class",

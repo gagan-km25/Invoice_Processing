@@ -13,6 +13,10 @@
   {% if invoice['status'] == 'failed' %}
   <p class="flash flash-error">Processing failed: {{ invoice['error_message'] or "the reason could not be recorded." }}</p>
   {% endif %}
+  {% if invoice['status'] == 'validation_failed' %}
+  <p class="flash flash-error">Business validation failed — review the findings
+     below, correct the source document if needed, and reprocess.</p>
+  {% endif %}
   <p class="hint">Source file: {{ invoice['original_filename'] }} ·
      <a href="{{ url_for('invoices.original', invoice_id=invoice['id']) }}">View original</a></p>
 
@@ -23,6 +27,10 @@
     <dt>Invoice date</dt><dd>{{ invoice['invoice_date'] or "—" }}</dd>
     <dt>Due date</dt><dd>{{ invoice['due_date'] or "—" }}</dd>
     <dt>Bill to</dt><dd>{{ invoice['bill_to'] or "—" }}</dd>
+    <dt>Bill to address</dt><dd>{{ invoice['bill_to_address'] or "—" }}</dd>
+    <dt>Ship to</dt><dd>{{ invoice['ship_to_name'] or "—" }}</dd>
+    <dt>Ship to address</dt><dd>{{ invoice['ship_to_address'] or "—" }}</dd>
+    <dt>PO number</dt><dd>{{ invoice['po_number'] or "—" }}</dd>
     <dt>Currency</dt><dd>{{ invoice['currency'] or "—" }}</dd>
     <dt>Subtotal</dt><dd>{{ invoice['subtotal'] if invoice['subtotal'] is not none else "—" }}</dd>
     <dt>Discount</dt><dd>{{ invoice['discount'] if invoice['discount'] is not none else "—" }}</dd>
@@ -31,6 +39,111 @@
     <dt>Total</dt><dd class="detail-total">{{ invoice['total'] if invoice['total'] is not none else "—" }}</dd>
   </dl>
 </section>
+
+{% if invoice['validation_status'] %}
+<section class="panel">
+  <h2>Validation
+    <span class="status status-{{ invoice['validation_status'] }}">{{ invoice['validation_status'] }}</span>
+  </h2>
+  {% if validation_findings %}
+  <ul class="warning-list">
+    {% for finding in validation_findings %}
+    <li>{{ finding['message'] }}
+      {% if finding['severity'] == 'error' %}<span class="badge badge-missing">error</span>
+      {% else %}<span class="badge badge-ambiguous">warning</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="hint">No validation findings were recorded.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if invoice['dup_status'] and invoice['dup_status'] != 'none' %}
+<section class="panel">
+  <h2>Duplicate check
+    <span class="badge badge-ambiguous">{{ invoice['dup_status'] }} duplicate</span>
+  </h2>
+  <ul class="warning-list">
+    {% for match in dup_matches %}
+    <li>
+      {{ match['kind'] == 'exact' and "Same vendor and invoice number as" or "Same vendor, total and invoice date as" }}
+      record <a href="{{ url_for('invoices.detail', invoice_id=match['id']) }}">#{{ match['id'] }}</a>
+      — {{ match['vendor'] or "—" }} / {{ match['invoice_number'] or "—" }}
+      ({{ match['invoice_date'] or "date unknown" }}, total {{ match['total'] if match['total'] is not none else "—" }}).
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="hint">Duplicates are informational — processing is not blocked.</p>
+</section>
+{% endif %}
+
+{% if invoice['status'] == 'pending_approval' %}
+<section class="panel">
+  <h2>Approval
+    <span class="badge badge-ambiguous">routed to the {{ invoice['approver_role'] }} approver</span>
+  </h2>
+  {% if current_role() == 'approver:' ~ invoice['approver_role'] %}
+  <form method="post" class="inline-form"
+        action="{{ url_for('approvals.approve', invoice_id=invoice['id']) }}">
+    <button type="submit" class="button-primary">Approve this invoice</button>
+  </form>
+  <form method="post" action="{{ url_for('approvals.reject', invoice_id=invoice['id']) }}" class="reject-form">
+    <label for="reason">Rejection reason (required)</label>
+    <textarea id="reason" name="reason" rows="3" required
+              placeholder="Why this invoice is rejected — recorded in the audit history."></textarea>
+    <button type="submit" class="button-danger">Reject this invoice…</button>
+  </form>
+  {% else %}
+  <p class="hint">Waiting on the {{ invoice['approver_role'] }} approver —
+     you are acting as {{ current_role() }}.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if invoice['status'] == 'rejected' %}
+<section class="panel">
+  <h2>Rejection
+    <span class="status status-rejected">rejected</span>
+  </h2>
+  <p><strong>Reason:</strong> {{ invoice['rejection_reason'] or "— not recorded —" }}</p>
+  <p class="hint">Decided by {{ invoice['acted_by'] or "unknown" }}
+     at {{ invoice['acted_at'] or "an unknown time" }}.</p>
+</section>
+{% endif %}
+
+{% if audit_entries %}
+<section class="panel">
+  <h2>Audit history</h2>
+  <table class="invoice-table audit-table">
+    <thead>
+      <tr><th>When</th><th>Event</th><th>Actor</th><th>Details</th></tr>
+    </thead>
+    <tbody>
+      {% for entry in audit_entries %}
+      <tr>
+        <td>{{ entry['created_at'] }}</td>
+        <td>{{ entry['event_type'] }}</td>
+        <td>{{ entry['actor'] }}</td>
+        <td>{{ entry['details'] or "—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{% if raw_response %}
+<section class="panel">
+  <h2>Raw extraction response</h2>
+  <details class="raw-response">
+    <summary>Show the retained raw provider response (truncated; HTML-escaped)</summary>
+    <pre>{{ raw_response }}</pre>
+  </details>
+  <p class="hint">Stored locally for traceability only — never sent anywhere.</p>
+</section>
+{% endif %}
 
 <section class="panel">
   <h2>Line items</h2>
@@ -58,15 +171,20 @@
 
 <section class="panel">
   <h2>Actions</h2>
-  {% if invoice['status'] in ('extracted', 'completed') %}
+  {% if invoice['status'] in ('extracted', 'completed') and current_role() == 'vendor' %}
   <p><a class="button" href="{{ url_for('invoices.review', invoice_id=invoice['id']) }}">Review &amp; save</a></p>
   {% endif %}
-  {% if invoice['status'] == 'failed' %}
+  {% if invoice['status'] in ('completed', 'validation_failed') and current_role() == 'vendor' %}
+  <form method="post" action="{{ url_for('invoices.submit', invoice_id=invoice['id']) }}" class="inline-form">
+    <button type="submit">Submit for approval…</button>
+  </form>
+  {% endif %}
+  {% if invoice['status'] in ('failed', 'validation_failed') %}
   <form method="post" action="{{ url_for('invoices.reprocess', invoice_id=invoice['id']) }}" class="inline-form">
     <button type="submit">Reprocess this invoice</button>
   </form>
   {% endif %}
-  {% if invoice['status'] == 'saved' %}
+  {% if invoice['status'] not in ('uploaded', 'processing') and current_role() == 'vendor' %}
   <form method="post" action="{{ url_for('invoices.delete', invoice_id=invoice['id']) }}" class="inline-form">
     <button type="submit" class="button-danger">Delete this invoice…</button>
   </form>

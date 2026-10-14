@@ -56,6 +56,48 @@ def get_invoice(conn: sqlite3.Connection, invoice_id: int) -> sqlite3.Row | None
     return cursor.fetchone()
 
 
+def set_validation(
+    conn: sqlite3.Connection, invoice_id: int, verdict: str, findings_json: str
+) -> None:
+    """Persist the business-validation verdict and findings (Sprint E3)."""
+    conn.execute(
+        "UPDATE invoices SET validation_status = ?, validation_json = ?, updated_at = ? WHERE id = ?",
+        (verdict, findings_json, _now(), invoice_id),
+    )
+    conn.commit()
+
+
+def set_duplicate_classification(
+    conn: sqlite3.Connection, invoice_id: int, classification: str, matches_json: str
+) -> None:
+    """Persist the duplicate classification and match details (Sprint E3)."""
+    conn.execute(
+        "UPDATE invoices SET dup_status = ?, dup_matches = ?, updated_at = ? WHERE id = ?",
+        (classification, matches_json, _now(), invoice_id),
+    )
+    conn.commit()
+
+
+def find_duplicate_candidates(
+    conn: sqlite3.Connection, invoice_id: int
+) -> list[sqlite3.Row]:
+    """Other invoices in duplicate-comparable states, excluding self.
+    (The v2-only `saved` alias left the candidate list with the v3
+    tightening — no row can carry it any more.)"""
+    placeholders = ", ".join("?" for _ in (
+        "completed", "validation_failed", "pending_approval",
+        "approved", "rejected",
+    ))
+    return conn.execute(
+        f"SELECT id, vendor, invoice_number, invoice_date, total "
+        f"FROM invoices WHERE id != ? AND status IN ({placeholders}) "
+        "AND vendor IS NOT NULL AND invoice_number IS NOT NULL ORDER BY id",
+        (invoice_id,
+         "completed", "validation_failed", "pending_approval",
+         "approved", "rejected"),
+    ).fetchall()
+
+
 def find_by_hash(
     conn: sqlite3.Connection, file_hash: str, exclude_id: int | None = None
 ) -> list[sqlite3.Row]:
@@ -80,17 +122,19 @@ def list_recent(conn: sqlite3.Connection, limit: int = 10) -> list[sqlite3.Row]:
     return cursor.fetchall()
 
 
-def find_saved_duplicates(
+def find_duplicate_records(
     conn: sqlite3.Connection,
     vendor: str,
     invoice_number: str,
     exclude_id: int | None = None,
 ) -> list[sqlite3.Row]:
-    """Saved records matching vendor + invoice number, case-insensitively
-    (US-S3-06). Drafts (uploaded/extracted/failed) never count as duplicates."""
+    """Records matching vendor + invoice number, case-insensitively, in ANY
+    status (Sprint E5 rewire of US-S3-06: with `saved` removed from the
+    lifecycle, the save-time duplicate gate compares against every stored
+    record). The invoice being saved is always excluded."""
     sql = (
-        "SELECT * FROM invoices WHERE status = 'saved' "
-        "AND vendor = ? COLLATE NOCASE AND invoice_number = ? COLLATE NOCASE"
+        "SELECT * FROM invoices WHERE "
+        "vendor = ? COLLATE NOCASE AND invoice_number = ? COLLATE NOCASE"
     )
     params: list = [vendor, invoice_number]
     if exclude_id is not None:
@@ -113,27 +157,45 @@ def _search_filter(q: str | None) -> tuple[str, list]:
     )
 
 
-def list_saved(
+def list_invoices(
     conn: sqlite3.Connection,
+    *,
+    status: str | None = None,
     q: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[sqlite3.Row]:
-    """Saved invoices for the history page: newest invoice date first (id as
-    tiebreak), optional search, minimal pagination (docs/09 §4)."""
+    """All invoices for the history/list page (Sprint E5, assignment §14):
+    newest invoice date first (id as tiebreak; undated rows last), optional
+    exact-status filter and search fragment, minimal pagination."""
     fragment, params = _search_filter(q)
+    status_clause = ""
+    if status:
+        # status placeholder precedes the search fragment in the SQL
+        params = [status, *params]
+        status_clause = " AND status = ?"
     sql = (
-        f"SELECT * FROM invoices WHERE status = 'saved'{fragment} "
+        f"SELECT * FROM invoices WHERE 1 = 1{status_clause}{fragment} "
         "ORDER BY invoice_date DESC, id DESC LIMIT ? OFFSET ?"
     )
     return conn.execute(sql, [*params, limit, offset]).fetchall()
 
 
-def count_saved(conn: sqlite3.Connection, q: str | None = None) -> int:
-    """Total saved invoices matching the same filter as list_saved."""
+def count_invoices(
+    conn: sqlite3.Connection,
+    *,
+    status: str | None = None,
+    q: str | None = None,
+) -> int:
+    """Total invoices matching the same filter as list_invoices."""
     fragment, params = _search_filter(q)
+    status_clause = ""
+    if status:
+        params = [status, *params]
+        status_clause = " AND status = ?"
     return conn.execute(
-        f"SELECT COUNT(*) FROM invoices WHERE status = 'saved'{fragment}", params
+        f"SELECT COUNT(*) FROM invoices WHERE 1 = 1{status_clause}{fragment}",
+        params,
     ).fetchone()[0]
 
 
@@ -146,18 +208,142 @@ def get_lines(conn: sqlite3.Connection, invoice_id: int) -> list[sqlite3.Row]:
 
 
 def delete_invoice(conn: sqlite3.Connection, invoice_id: int) -> None:
-    """Delete a saved invoice; line items are removed by the FK cascade
-    (PRAGMA foreign_keys = ON is set by get_db). Guard: only `saved` records
-    may be deleted here (US-S4-05/06)."""
+    """Delete an invoice; line items and audit rows are removed by the FK
+    cascade (PRAGMA foreign_keys = ON is set by get_db). Guard (Sprint E5,
+    approved decision 1): records still `uploaded` or `processing` may not
+    be deleted — a queued job owns the former, the pipeline owns the
+    latter; every other status is deletable with confirmation."""
     record = get_invoice(conn, invoice_id)
     if record is None:
         raise ValueError(f"invoice {invoice_id} not found")
-    if record["status"] != "saved":
+    if record["status"] in ("uploaded", "processing"):
         raise ValueError(
-            f"invoice {invoice_id} is {record['status']!r}, not 'saved'"
+            f"invoice {invoice_id} is {record['status']!r} — it cannot be "
+            "deleted while queued or processing"
         )
     conn.execute("DELETE FROM invoices WHERE id = ?", (invoice_id,))
     conn.commit()
+
+
+def submit_for_approval(
+    conn: sqlite3.Connection,
+    invoice_id: int,
+    *,
+    approver_role: str,
+    actor: str = "vendor",
+) -> None:
+    """Transition a submittable invoice → `pending_approval` in ONE
+    transaction (Sprint E4, assignment §10): status + `approver_role` +
+    the `review_submitted` and `approval_assigned` audit entries — the
+    routing decision is never separated from the status change.
+
+    Eligibility here is defense in depth (the workflow authority is
+    `workflow.transition_target`, checked by the caller; this module
+    cannot import workflow without a cycle). Only `completed` and
+    `validation_failed` are submittable (approved decision 3: `saved`
+    stays outside the approval flow). Raises ValueError for a missing
+    record or an ineligible status.
+    """
+    record = get_invoice(conn, invoice_id)
+    if record is None:
+        raise ValueError(f"invoice {invoice_id} not found")
+    if record["status"] not in ("completed", "validation_failed"):
+        raise ValueError(
+            f"invoice {invoice_id} is {record['status']!r}, not submittable"
+        )
+    now = _now()
+    try:
+        conn.execute(
+            "UPDATE invoices SET status = 'pending_approval', "
+            "approver_role = ?, updated_at = ? WHERE id = ?",
+            (approver_role, now, invoice_id),
+        )
+        conn.execute(
+            "INSERT INTO invoice_audit (invoice_id, event_type, actor, details, created_at)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (invoice_id, "review_submitted", actor, "submitted for approval", now),
+        )
+        conn.execute(
+            "INSERT INTO invoice_audit (invoice_id, event_type, actor, details, created_at)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (
+                invoice_id,
+                "approval_assigned",
+                "system",
+                f"routed to the {approver_role} approver",
+                now,
+            ),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+
+
+def record_approval_decision(
+    conn: sqlite3.Connection,
+    invoice_id: int,
+    *,
+    decision: str,
+    actor: str,
+    rejection_reason: str | None = None,
+) -> None:
+    """Apply an approver's decision in ONE transaction (Sprint E4,
+    assignment §11): `pending_approval` → approved/rejected, the decision
+    columns (`acted_by`, `acted_at`, and `rejection_reason` on reject) and
+    the matching audit entry together. `decision` is `approve` or `reject`;
+    legality is checked by the caller via the workflow authority and
+    defensively here. Raises ValueError for a missing record, an
+    ineligible status, or an unknown decision."""
+    record = get_invoice(conn, invoice_id)
+    if record is None:
+        raise ValueError(f"invoice {invoice_id} not found")
+    if record["status"] != "pending_approval":
+        raise ValueError(
+            f"invoice {invoice_id} is {record['status']!r}, not "
+            "pending_approval — it cannot be approved or rejected"
+        )
+    if decision == "approve":
+        new_status, event = "approved", "invoice_approved"
+    elif decision == "reject":
+        new_status, event = "rejected", "invoice_rejected"
+    else:
+        raise ValueError(f"unknown decision {decision!r}")
+    now = _now()
+    try:
+        assignments = [
+            "status = ?", "acted_by = ?", "acted_at = ?", "updated_at = ?"
+        ]
+        params: list = [new_status, actor, now, now]
+        if decision == "reject":
+            assignments.append("rejection_reason = ?")
+            params.append(rejection_reason)
+        params.append(invoice_id)
+        conn.execute(
+            f"UPDATE invoices SET {', '.join(assignments)} WHERE id = ?",
+            params,
+        )
+        conn.execute(
+            "INSERT INTO invoice_audit (invoice_id, event_type, actor, details, created_at)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (invoice_id, event, actor, rejection_reason, now),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+
+
+def list_pending_for_role(
+    conn: sqlite3.Connection, approver_role: str
+) -> list[sqlite3.Row]:
+    """The approval queue for one routing role: pending invoices routed to
+    it, most recently submitted first (Sprint E4, ARCHITECTURE §6)."""
+    return conn.execute(
+        "SELECT * FROM invoices WHERE status = 'pending_approval' "
+        "AND approver_role = ? ORDER BY updated_at DESC, id DESC",
+        (approver_role,),
+    ).fetchall()
 
 
 def save_invoice(
@@ -167,12 +353,11 @@ def save_invoice(
     header: dict,
     lines: list[dict],
 ) -> None:
-    """Transition a reviewed invoice → `saved` atomically (US-S3-05).
-
-    Sprint E1: eligible source statuses are `extracted` (legacy rows) and
-    `completed` (the pipeline's extraction-complete state); the record is
-    written as `saved`, the human-flow terminal state until Sprint E4
-    introduces submit-for-approval.
+    """Persist a reviewed invoice's confirmed values atomically (US-S3-05,
+    rewired Sprint E5): the record KEEPS its lifecycle status (`completed`
+    for pipeline output, legacy `extracted` rows until the v3 migration) —
+    the `saved` transitional status is gone, and approval runs from
+    `completed`/`validation_failed` per the E4 workflow.
 
     Writes the reviewed header columns and replaces the full line set in ONE
     transaction. Any failure rolls everything back and re-raises — the record
@@ -193,8 +378,10 @@ def save_invoice(
             UPDATE invoices SET
                 vendor = ?, vendor_tax_id = ?, invoice_number = ?,
                 invoice_date = ?, due_date = ?, bill_to = ?, currency = ?,
+                bill_to_address = ?, ship_to_name = ?, ship_to_address = ?,
+                po_number = ?,
                 subtotal = ?, discount = ?, tax = ?, tax_rate = ?, total = ?,
-                status = 'saved', updated_at = ?
+                updated_at = ?
             WHERE id = ?
             """,
             (
@@ -205,6 +392,10 @@ def save_invoice(
                 header.get("due_date"),
                 header.get("bill_to"),
                 header.get("currency"),
+                header.get("bill_to_address"),
+                header.get("ship_to_name"),
+                header.get("ship_to_address"),
+                header.get("po_number"),
                 _to_real(header.get("subtotal")),
                 _to_real(header.get("discount")),
                 _to_real(header.get("tax")),
@@ -222,8 +413,8 @@ def save_invoice(
                 """
                 INSERT INTO invoice_lines (
                     invoice_id, line_number, description, quantity,
-                    unit_price, amount
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    unit_price, amount, line_tax
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     invoice_id,
@@ -232,6 +423,7 @@ def save_invoice(
                     _to_real(line.get("quantity")),
                     _to_real(line.get("unit_price")),
                     _to_real(line.get("amount")),
+                    _to_real(line.get("tax")),
                 ),
             )
         conn.commit()
@@ -361,6 +553,8 @@ def update_extraction(
     assignments = [
         "vendor = ?", "vendor_tax_id = ?", "invoice_number = ?",
         "invoice_date = ?", "due_date = ?", "bill_to = ?", "currency = ?",
+        "bill_to_address = ?", "ship_to_name = ?", "ship_to_address = ?",
+        "po_number = ?",
         "subtotal = ?", "discount = ?", "tax_rate = ?", "tax = ?", "total = ?",
         "page_count = ?", "extraction_json = ?", "updated_at = ?",
     ]
@@ -372,6 +566,10 @@ def update_extraction(
         column_value(fields.get("due_date")),
         column_value(fields.get("bill_to")),
         column_value(fields.get("currency")),
+        column_value(fields.get("bill_to_address")),
+        column_value(fields.get("ship_to_name")),
+        column_value(fields.get("ship_to_address")),
+        column_value(fields.get("po_number")),
         column_value(fields.get("subtotal")),
         column_value(fields.get("discount")),
         column_value(fields.get("tax_rate")),
@@ -382,8 +580,10 @@ def update_extraction(
         now,
     ]
     if status is not None:
-        assignments.insert(14, "status = ?")
-        params.insert(14, status)
+        # Insert before the trailing `updated_at` assignment/param.
+        index = len(assignments) - 1
+        assignments.insert(index, "status = ?")
+        params.insert(index, status)
     if raw_response is not None:
         assignments.append("raw_response = ?")
         params.append(raw_response)
@@ -404,8 +604,8 @@ def update_extraction(
                 """
                 INSERT INTO invoice_lines (
                     invoice_id, line_number, description, quantity,
-                    unit_price, amount
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    unit_price, amount, line_tax
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     invoice_id,
@@ -414,6 +614,7 @@ def update_extraction(
                     float(item["quantity"]) if item.get("quantity") is not None else None,
                     float(item["unit_price"]) if item.get("unit_price") is not None else None,
                     float(item["amount"]) if item.get("amount") is not None else None,
+                    float(item["tax"]) if item.get("tax") is not None else None,
                 ),
             )
     conn.commit()

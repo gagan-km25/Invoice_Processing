@@ -58,52 +58,65 @@ def _rows(app, query="SELECT * FROM invoices ORDER BY id"):
 
 # ------------------------------------------------------------- history (S4-01/02)
 
-def test_history_lists_saved_only_newest_first(app, client, make_pdf):
-    """TC-S4-I01 — saved-only filtering + newest-first ordering (AC-01.1/01.2)."""
-    _upload_and_save(client, make_pdf, app, "Alpha Corp", "INV-A",
+def test_history_lists_all_statuses_newest_first(app, client, make_pdf):
+    """TC-S4-I01 (E5 redefinition) — the list shows ALL statuses, newest
+    invoice date first; the status filter narrows it."""
+    _upload_and_save(client, make_pdf, app, "Alpha Corp", "INV-A1",
                      "2026-03-01", "a.pdf")
-    _upload_and_save(client, make_pdf, app, "Beta GmbH", "INV-B",
+    _upload_and_save(client, make_pdf, app, "Beta GmbH", "INV-B2",
                      "2026-01-01", "b.pdf")
-    _upload_and_save(client, make_pdf, app, "Gamma Ltd", "INV-C",
+    _upload_and_save(client, make_pdf, app, "Gamma Ltd", "INV-C3",
                      "2026-02-01", "c.pdf")
-    # one draft that must NOT appear
     _, pdf_bytes = make_pdf("draft.pdf", pages=1, text_lines=_synthetic(
         "Draft Co", "INV-DRAFT", "2026-05-01"))
     client.post("/upload", data={"file": (io.BytesIO(pdf_bytes), "draft.pdf")},
                 content_type="multipart/form-data", follow_redirects=True)
+    draft_id = _rows(app)[-1]["id"]
 
-    history = client.get("/invoices")
-    body = history.data
-    assert b"INV-A" in body and b"INV-B" in body and b"INV-C" in body
-    assert b"INV-DRAFT" not in body
-    assert b"Draft Co" not in body  # drafts never appear in history
+    body = client.get("/invoices").data
+    for number in (b"INV-A1", b"INV-B2", b"INV-C3"):
+        assert number in body  # every status is listed
+    # the uploaded draft row appears too (its number is NULL until the
+    # worker runs — "INV-DRAFT" has no digits for the parser — so anchor
+    # on the row's ID link)
+    assert f">#{draft_id}</a>".encode() in body
+
+    filtered = client.get("/invoices", query_string={"status": "completed"}).data
+    assert b"INV-A1" in filtered and b"INV-B2" in filtered
+    assert f">#{draft_id}</a>".encode() not in filtered  # draft filtered out
+
+    detail = client.get(f"/invoices/{draft_id}")
+    assert detail.status_code == 200  # the draft itself is still viewable
 
 
 def test_history_ordering_exact(app, client, make_pdf):
     """TC-S4-I01b — exact order: newest invoice date first."""
-    _upload_and_save(client, make_pdf, app, "Alpha Corp", "INV-A", "2026-03-01", "a.pdf")
-    _upload_and_save(client, make_pdf, app, "Beta GmbH", "INV-B", "2026-01-01", "b.pdf")
-    _upload_and_save(client, make_pdf, app, "Gamma Ltd", "INV-C", "2026-02-01", "c.pdf")
+    _upload_and_save(client, make_pdf, app, "Alpha Corp", "INV-A1", "2026-03-01", "a.pdf")
+    _upload_and_save(client, make_pdf, app, "Beta GmbH", "INV-B2", "2026-01-01", "b.pdf")
+    _upload_and_save(client, make_pdf, app, "Gamma Ltd", "INV-C3", "2026-02-01", "c.pdf")
     body = client.get("/invoices").data
-    assert body.index(b"INV-A") < body.index(b"INV-C") < body.index(b"INV-B")
+    assert body.index(b"INV-A1") < body.index(b"INV-C3") < body.index(b"INV-B2")
 
 
 def test_history_summary_columns(app, client, make_pdf):
-    """TC-S4-I02 — number, vendor, date, total, status rendered (AC-02.1)."""
-    _upload_and_save(client, make_pdf, app, "Acme Corporation", "INV-0042",
-                     "2026-01-15", "a.pdf")
+    """TC-S4-I02 (E5) — ID, number, vendor, date, total, status and
+    created date are all rendered (assignment §14)."""
+    invoice_id = _upload_and_save(client, make_pdf, app, "Acme Corporation",
+                                  "INV-0042", "2026-01-15", "a.pdf")
     body = client.get("/invoices").data
+    assert f">#{invoice_id}</a>".encode() in body  # ID column
     assert b"INV-0042" in body
     assert b"Acme Corporation" in body
     assert b"2026-01-15" in body
     assert b"1080.0" in body
-    assert b"saved" in body
+    assert b"completed" in body  # status badge
+    assert b"Created" in body    # created-date column header
 
 
 def test_history_empty_state(app, client):
     """TC-S4-I03 — no saved invoices: clear empty state with upload link."""
     response = client.get("/invoices", follow_redirects=True)
-    assert b"No saved invoices yet" in response.data
+    assert b"No invoices yet" in response.data
     assert b"/" in response.data  # upload link present
 
 
@@ -184,7 +197,7 @@ def test_detail_shows_everything(app, client, make_pdf):
                                   "INV-0042", "2026-01-15", "a.pdf")
     body = client.get(f"/invoices/{invoice_id}").data
     for needle in (b"INV-0042", b"Acme Corporation", b"2026-01-15",
-                   b"1000.0", b"80.0", b"1080.0", b"USD", b"saved",
+                   b"1000.0", b"80.0", b"1080.0", b"USD", b"completed",
                    b"View original"):
         assert needle in body, needle
 
@@ -259,11 +272,11 @@ def test_cascade_and_no_orphans(app, client, make_pdf):
         "currency": "INR", "subtotal": "6550.00", "discount": "0.00",
         "tax": "1179.00", "tax_rate": "18", "total": "7729.00",
     }
-    # save first — only saved invoices may be deleted
+    # E5: a completed invoice is deletable without any prior status change
     client.post(f"/invoices/{invoice_id}/save", data=saved_form,
                 follow_redirects=True)
     assert _rows(app, f"SELECT status FROM invoices WHERE id = {invoice_id}")[0][
-        "status"] == "saved"
+        "status"] == "completed"
     client.post(f"/invoices/{invoice_id}/delete", data={}, follow_redirects=True)
     client.post(f"/invoices/{invoice_id}/delete",
                 data={"confirm_delete": "1"}, follow_redirects=True)
@@ -336,31 +349,53 @@ def test_delete_cross_site_origin_403(app, client, make_pdf):
     assert _rows(app, f"SELECT * FROM invoices WHERE id = {invoice_id}")[0] is not None
 
 
-def test_delete_nonsaved_guard(app, client, make_pdf):
-    """TC-S4-I22 — deleting an extracted (unsaved) draft is refused."""
+def test_delete_blocked_while_uploaded_and_processing(
+    app, client, make_pdf
+):
+    """TC-S4-I22 (E5 redefinition) — deleting is refused while the record
+    is `uploaded`; zero writes."""
     _, pdf_bytes = make_pdf("draft.pdf", pages=1, text_lines=[
         "TAX INVOICE", "Acme Invoice No: X-1", "Subtotal $1.00",
         "Grand Total $1.00"])
     client.post("/upload", data={"file": (io.BytesIO(pdf_bytes), "d.pdf")},
                 content_type="multipart/form-data", follow_redirects=True)
     draft_id = _rows(app)[-1]["id"]
-    response = client.post(f"/invoices/{draft_id}/delete",
-                           data={"confirm_delete": "1"}, follow_redirects=True)
-    assert b"only saved invoices can be deleted" in response.data
+
+    while_uploaded = client.post(
+        f"/invoices/{draft_id}/delete",
+        data={"confirm_delete": "1"}, follow_redirects=True)
+    assert b"cannot be deleted while queued or processing" in while_uploaded.data
+    assert _rows(app, f"SELECT * FROM invoices WHERE id = {draft_id}")[0] is not None
+
+    # a processing record is equally protected (repository-level proof in
+    # tests/unit/test_history_repository.py::test_delete_guard_blocked_states)
+    conn = sqlite3.connect(app.config["DATABASE"])
+    try:
+        conn.execute(
+            "UPDATE invoices SET status = 'processing' WHERE id = ?",
+            (draft_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    while_processing = client.post(
+        f"/invoices/{draft_id}/delete",
+        data={"confirm_delete": "1"}, follow_redirects=True)
+    assert b"cannot be deleted while queued or processing" in while_processing.data
     assert _rows(app, f"SELECT * FROM invoices WHERE id = {draft_id}")[0] is not None
 
 
 def test_sprint3_regression_review_save_still_works(app, client, make_pdf):
-    """TC-S4-I19 — Sprint 3 flow unaffected: upload → review → save works;
-    the saved record then appears in history."""
+    """TC-S4-I19 (E5) — upload → review → save still works; the record
+    stays `completed` and remains listed and reviewable."""
     invoice_id = _upload_and_save(client, make_pdf, app, "Acme", "INV-1",
                                   "2026-01-15", "a.pdf")
     row = _rows(app, f"SELECT * FROM invoices WHERE id = {invoice_id}")[0]
-    assert row["status"] == "saved"
+    assert row["status"] == "completed"
     assert row["invoice_number"] == "INV-1"
-    review = client.get(f"/invoices/{invoice_id}/review", follow_redirects=True)
+    review = client.get(f"/invoices/{invoice_id}/review")
     assert review.status_code == 200
-    assert b"only extracted or completed invoices can be reviewed" in review.data
+    body = client.get("/invoices").data
+    assert b"INV-1" in body
 
 
 def _extract_real_001(app):

@@ -159,6 +159,36 @@ def app_context(app):
 
 
 @pytest.fixture()
+def set_role(client):
+    """set_role(client-less closure)(role) — switch the test session's
+    workflow role via the real route (Sprint E4)."""
+
+    def _set(role):
+        return client.post("/session/role", data={"role": role})
+
+    return _set
+
+
+@pytest.fixture()
+def audit_rows(app):
+    """Direct query helper: audit entries of one invoice, oldest first."""
+    import sqlite3
+
+    def _rows(invoice_id):
+        conn = sqlite3.connect(app.config["DATABASE"])
+        conn.row_factory = sqlite3.Row
+        try:
+            return conn.execute(
+                "SELECT * FROM invoice_audit WHERE invoice_id = ? ORDER BY id",
+                (invoice_id,),
+            ).fetchall()
+        finally:
+            conn.close()
+
+    return _rows
+
+
+@pytest.fixture()
 def worker(app):
     """The app's invoice worker in manual mode (WORKER_AUTOSTART=False):
     tests call `worker.run_pending()` to drain the queue deterministically,

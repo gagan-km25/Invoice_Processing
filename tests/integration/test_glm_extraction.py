@@ -55,7 +55,9 @@ VALID_GLM_JSON = json.dumps(
         "tax_rate": 8,
         "total": 1080,
         "line_items": [
-            {"description": "Item A", "quantity": 2, "unit_price": 40, "amount": 80}
+            # E3: the pipeline validates line sums against the subtotal, so
+            # the fixture is internally consistent (2 × 500 = 1000 = subtotal)
+            {"description": "Item A", "quantity": 2, "unit_price": 500, "amount": 1000}
         ],
     }
 )

@@ -213,4 +213,79 @@ def test_parse_line_rows_preserves_input():
             "amount_0": "2", "remove_0": "on"}
     rows = parse_line_rows(form)
     assert rows == [{"i": 0, "remove": True, "description": "Kept",
-                     "quantity": "1", "unit_price": "2", "amount": "2"}]
+                     "quantity": "1", "unit_price": "2", "amount": "2",
+                     "tax": ""}]
+
+
+# ------------------------------------------------ Sprint E3: §6 extensions
+
+def test_prefill_populates_extended_fields():
+    """TC-E3-XF-01 — extended header fields and per-line tax prefill the
+    review form; missing fields render blank (US-E3-3 AC5 evidence)."""
+    draft = {
+        "fields": {
+            "po_number": {"status": "found", "value": "PO-2026-77"},
+            "bill_to_address": {"status": "found", "value": "42 MG Road"},
+            "ship_to_name": {"status": "found", "value": "Acme Warehouse"},
+            "ship_to_address": {"status": "missing", "value": None},
+            "vendor_tax_id": {"status": "found", "value": "29AABCT1234F1Z5"},
+        },
+        "lines": [{"description": "Widget", "quantity": "2",
+                   "unit_price": "50", "amount": "100", "tax": "3.5"}],
+    }
+    values, line_rows, _flags = prefill_from_draft(draft)
+    assert values["po_number"] == "PO-2026-77"
+    assert values["bill_to_address"] == "42 MG Road"
+    assert values["ship_to_name"] == "Acme Warehouse"
+    assert values["ship_to_address"] == ""
+    assert values["vendor_tax_id"] == "29AABCT1234F1Z5"
+    assert line_rows[0]["tax"] == "3.5"
+
+
+def test_extended_text_fields_too_long_blocked():
+    """TC-E3-XF-02 — the 200-character cap applies to extended text
+    fields (po_number, vendor_tax_id), same as core text fields."""
+    result = validate_and_merge(base_form(po_number="x" * 201))
+    assert result["ok"] is False and "po_number" in result["errors"]
+    result = validate_and_merge(base_form(vendor_tax_id="x" * 201))
+    assert result["ok"] is False and "vendor_tax_id" in result["errors"]
+
+
+def test_blank_extended_fields_are_valid():
+    """TC-E3-XF-03 — extended fields are optional: the minimal form stays
+    valid with every extended field blank."""
+    result = validate_and_merge(base_form())
+    assert result["ok"] is True
+
+
+def test_line_tax_round_trips_and_quantizes():
+    """TC-E3-XF-04 — a valid per-line tax survives validation, quantized
+    to 2dp like every amount."""
+    form = base_form()
+    form.update({"description_0": "Widget", "quantity_0": "2",
+                 "unit_price_0": "50", "amount_0": "100", "tax_0": "3.456"})
+    result = validate_and_merge(form)
+    assert result["ok"] is True
+    assert result["data"]["lines"][0]["tax"] == Decimal("3.46")
+
+
+def test_blank_line_tax_is_valid():
+    """TC-E3-XF-05 — per-line tax is optional: no tax input → None."""
+    form = base_form()
+    form.update({"description_0": "Widget", "quantity_0": "2",
+                 "unit_price_0": "50", "amount_0": "100"})
+    result = validate_and_merge(form)
+    assert result["ok"] is True
+    assert result["data"]["lines"][0]["tax"] is None
+
+
+def test_non_numeric_line_tax_blocked():
+    """TC-E3-XF-06 — non-numeric per-line tax is blocked with the field
+    named, per the existing decimal-field rule (AC-04.2: "non-numeric →
+    blocked, field named") and US-E3-3 strict validation."""
+    form = base_form()
+    form.update({"description_0": "Widget", "quantity_0": "2",
+                 "unit_price_0": "50", "amount_0": "100", "tax_0": "abc"})
+    result = validate_and_merge(form)
+    assert result["ok"] is False
+    assert "tax_0" in result["errors"]

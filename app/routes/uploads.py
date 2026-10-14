@@ -8,6 +8,7 @@ returns immediately. The invoice detail page shows live processing status.
 """
 from flask import (
     Blueprint,
+    abort,
     current_app,
     flash,
     redirect,
@@ -19,6 +20,7 @@ from flask import (
 from app.db import get_db
 from app.db.repository import find_by_hash, list_recent
 from app.services.pipeline import JOB_NEW_UPLOAD, record_upload_event
+from app.services.roles import ROLE_VENDOR, current_role
 from app.services.uploading import UploadRejected, store_upload
 
 bp = Blueprint("uploads", __name__)
@@ -36,6 +38,8 @@ def index():
 
 @bp.post("/upload")
 def upload():
+    if current_role() != ROLE_VENDOR:
+        abort(403)  # route map: upload is a vendor action (ARCHITECTURE §6)
     try:
         invoice = store_upload(request.files.get("file"))
     except UploadRejected as exc:

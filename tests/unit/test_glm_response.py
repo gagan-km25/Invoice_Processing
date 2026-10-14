@@ -125,3 +125,41 @@ def test_invalid_line_items_are_skipped_and_numbering_continues():
     draft = ai_json_to_draft(json.dumps(payload), "glm-test", 1)
     assert [line["description"] for line in draft["lines"]] == ["Good", "Also good"]
     assert [line["line_number"] for line in draft["lines"]] == [1, 2]
+
+
+# ------------------------------------------------- Sprint E3: §6 extensions
+
+def test_extended_fields_are_mapped_from_response():
+    """US-E3-3 — PO number, bill-to/ship-to, GSTIN and per-line tax are
+    coerced into the draft exactly like the core fields (E3 acceptance
+    evidence: direct extraction-mapping assertions)."""
+    payload = dict(
+        VALID,
+        po_number="PO-2026-77",
+        bill_to_address="42 MG Road, Bengaluru",
+        ship_to_name="Acme Warehouse",
+        ship_to_address="7 Industrial Area, Bengaluru",
+        line_items=[
+            {"description": "Widget", "quantity": 2, "unit_price": 50,
+             "amount": 100, "tax": 3.456},
+        ],
+    )
+    draft = ai_json_to_draft(json.dumps(payload), "glm-test", 1)
+    fields = draft["fields"]
+    assert fields["po_number"] == {"status": "found", "value": "PO-2026-77"}
+    assert fields["bill_to_address"]["value"] == "42 MG Road, Bengaluru"
+    assert fields["ship_to_name"]["value"] == "Acme Warehouse"
+    assert fields["ship_to_address"]["value"] == "7 Industrial Area, Bengaluru"
+    assert fields["vendor_tax_id"]["value"] == "29AABCT1234F1Z5"
+    # per-line tax: coerced and 2dp-quantized like every amount
+    assert draft["lines"][0]["tax"] == Decimal("3.46")
+
+
+def test_absent_extended_fields_degrade_to_missing():
+    """Absent extended fields → `missing` (never crash, never fabricate);
+    a line without tax carries tax None so the column stays empty."""
+    draft = ai_json_to_draft(json.dumps(VALID), "glm-test", 1)
+    for name in ("po_number", "bill_to_address", "ship_to_name",
+                 "ship_to_address"):
+        assert draft["fields"][name]["status"] == "missing", name
+    assert all(line["tax"] is None for line in draft["lines"])

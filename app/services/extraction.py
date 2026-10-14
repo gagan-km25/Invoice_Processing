@@ -53,7 +53,11 @@ class ExtractionRetryable(ExtractionError):
 # AI response schema/validation
 # --------------------------------------------------------------------------
 
-_TEXT_FIELDS = ("vendor", "vendor_tax_id", "invoice_number", "bill_to")
+_TEXT_FIELDS = (
+    "vendor", "vendor_tax_id", "invoice_number", "bill_to",
+    # Enhancement §6 extended fields (Sprint E3):
+    "po_number", "bill_to_address", "ship_to_name", "ship_to_address",
+)
 _AMOUNT_FIELDS = ("subtotal", "discount", "tax", "total", "tax_rate")
 _DATE_FIELDS = ("invoice_date", "due_date")
 
@@ -187,6 +191,7 @@ def ai_json_to_draft(content: str, model: str, page_count: int | None) -> dict:
         quantity, note_q = _coerce_amount(item.get("quantity"))
         unit_price, note_u = _coerce_amount(item.get("unit_price"))
         amount, note_a = _coerce_amount(item.get("amount"))
+        line_tax, note_t = _coerce_amount(item.get("tax"))
         if None in (quantity, unit_price, amount):
             continue
         lines.append(
@@ -196,6 +201,8 @@ def ai_json_to_draft(content: str, model: str, page_count: int | None) -> dict:
                 "quantity": quantity,
                 "unit_price": unit_price,
                 "amount": amount,
+                # Optional per-line tax (enhancement §6): absent/invalid → None
+                "tax": line_tax,
             }
         )
 
@@ -227,10 +234,13 @@ _RESPONSE_SCHEMA_HINT = (
     '{"invoice_number": string|null, "invoice_date": "YYYY-MM-DD"|null, '
     '"due_date": "YYYY-MM-DD"|null, "vendor": string|null, '
     '"vendor_tax_id": string|null, "bill_to": string|null, '
+    '"bill_to_address": string|null, "ship_to_name": string|null, '
+    '"ship_to_address": string|null, "po_number": string|null, '
     '"currency": string|null (ISO 3-letter code), "subtotal": number|null, '
     '"discount": number|null, "tax": number|null, "tax_rate": number|null, '
     '"total": number|null, "line_items": array of {"description": string, '
-    '"quantity": number, "unit_price": number, "amount": number}}'
+    '"quantity": number, "unit_price": number, "amount": number, '
+    '"tax": number|null}}'
 )
 
 _SYSTEM_PROMPT = (

@@ -39,6 +39,7 @@ Approved design (docs/ARCHITECTURE.md §4; P-E-05 job-ownership amendment):
 Tests drive the worker deterministically via `run_pending()` with
 `WORKER_AUTOSTART=False` (conftest default).
 """
+import json
 import sqlite3
 import threading
 import time
@@ -49,11 +50,14 @@ from flask import current_app
 from app.db import get_db
 from app.db.repository import (
     get_invoice,
+    set_duplicate_classification,
     set_extract_attempts,
+    set_validation,
     transition_status,
 )
-from app.services import applog, extraction
+from app.services import applog, duplicates, extraction, validation
 from app.services.audit import (
+    EVENT_DUPLICATE_DETECTED,
     EVENT_EXTRACTION_COMPLETED,
     EVENT_EXTRACTION_FAILED,
     EVENT_INVOICE_UPLOADED,
@@ -64,6 +68,7 @@ from app.services.workflow import (
     ACTION_FAIL,
     ACTION_REPROCESS,
     ACTION_START,
+    ACTION_VALIDATION_FAILED,
     apply_transition,
 )
 
@@ -390,17 +395,73 @@ class InvoiceWorker:
             finally:
                 audit_conn.close()
 
-            # T2: processing → completed (machine-validated; audit written in
-            # the same transaction as the status change).
+            # Sprint E3: business validation (§8.1–8.5) on the extracted
+            # draft, then duplicate classification (§9). The verdict decides
+            # the transition: error findings → validation_failed (T3);
+            # passed/warning → completed (T2). Warnings never block
+            # (approved decision 1).
+            record_conn = get_db()
+            try:
+                record = get_invoice(record_conn, invoice_id)
+                draft_text = record["extraction_json"] or "{}"
+            finally:
+                record_conn.close()
+            draft = json.loads(draft_text)
+
+            verdict_result = validation.validate(
+                draft.get("fields", {}),
+                draft.get("lines", []),
+                tolerance=self.app.config["VALIDATION_TOLERANCE"],
+            )
+            validation_conn = get_db()
+            try:
+                set_validation(
+                    validation_conn,
+                    invoice_id,
+                    verdict_result["verdict"],
+                    json.dumps(verdict_result["findings"], ensure_ascii=False),
+                )
+            finally:
+                validation_conn.close()
+
+            # Sprint E3: duplicate classification (§9) — informational,
+            # never blocking; persisted with explanations.
+            dup_conn = get_db()
+            try:
+                dup_result = duplicates.classify(dup_conn, invoice_id)
+                set_duplicate_classification(
+                    dup_conn,
+                    invoice_id,
+                    dup_result["classification"],
+                    json.dumps(dup_result["matches"], ensure_ascii=False),
+                )
+                if dup_result["classification"] != "none":
+                    insert_audit(
+                        dup_conn,
+                        invoice_id,
+                        EVENT_DUPLICATE_DETECTED,
+                        actor="system",
+                        details=dup_result["classification"],
+                    )
+            finally:
+                dup_conn.close()
+
+            # T2/T3: machine-validated transition; audit written in the same
+            # transaction as the status change (apply_transition picks the
+            # event type from the workflow map).
             complete_conn = get_db()
             try:
-                apply_transition(complete_conn, invoice_id, ACTION_COMPLETE)
+                if verdict_result["verdict"] == validation.VERDICT_FAILED:
+                    apply_transition(complete_conn, invoice_id, ACTION_VALIDATION_FAILED)
+                else:
+                    apply_transition(complete_conn, invoice_id, ACTION_COMPLETE)
             finally:
                 complete_conn.close()
             applog.log_event(
                 "pipeline_completed",
                 invoice_id=invoice_id,
                 attempts=total,
+                verdict=verdict_result["verdict"],
             )
             return
 

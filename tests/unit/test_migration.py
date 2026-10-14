@@ -445,13 +445,13 @@ def _audit_count(path) -> int:
 
 
 def test_init_db_refuses_unknown_shape(make_app_config, tmp_path):
-    """A database that claims version >= 2 but lacks v2 columns must never
-    be silently 'upgraded'."""
+    """A database that claims the current version but lacks a known shape
+    must never be silently 'upgraded' (E5: current = v3)."""
     weird = tmp_path / "weird.db"
     conn = _open(weird)
     try:
         conn.execute("CREATE TABLE invoices (id INTEGER PRIMARY KEY)")
-        conn.execute("PRAGMA user_version = 2")
+        conn.execute("PRAGMA user_version = 3")
         conn.commit()
     finally:
         conn.close()

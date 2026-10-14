@@ -46,8 +46,6 @@ class Config:
     # Approval routing: total < threshold → manager, else finance. The
     # threshold is a Decimal so comparisons stay exact at the boundary.
     APPROVAL_THRESHOLD = Decimal("100000.00")
-    # Rounding tolerance for amount-consistency validation (assignment §8.2).
-    VALIDATION_TOLERANCE = Decimal("0.01")
 
     # Invoice lifecycle (enhancement assignment §5/§12). The single source of
     # truth for valid statuses; transitions are controlled by
@@ -91,3 +89,7 @@ class Config:
     # capped by the provider's own ≤5 MB / ≤6000×6000 px limits).
     RAW_RESPONSE_MAX_BYTES = 64 * 1024
     VISION_MAX_PAGES = 3
+
+    # Business validation (Sprint E3, assignment §8.2): inclusive amount
+    # tolerance — differences ≤ this value pass, larger differences fail.
+    VALIDATION_TOLERANCE = Decimal("0.01")

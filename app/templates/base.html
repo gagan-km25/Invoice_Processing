@@ -11,9 +11,20 @@
     <h1>Invoice Extractor</h1>
     <p class="tagline">local-only · your invoices never leave this machine</p>
     <nav class="site-nav">
+      {% if current_role() != 'vendor' %}
+      <a href="{{ url_for('approvals.queue') }}">Approvals</a>
+      {% else %}
       <a href="{{ url_for('uploads.index') }}">Upload</a>
+      {% endif %}
       <a href="{{ url_for('invoices.history') }}">History</a>
     </nav>
+    <form method="post" action="{{ url_for('session.set_role') }}" class="role-switch">
+      <span class="role-label">Role: {{ current_role() }}</span>
+      {% for role in role_choices %}
+      <button type="submit" name="role" value="{{ role }}"
+              {% if role == current_role() %}class="role-active" disabled{% endif %}>{{ role }}</button>
+      {% endfor %}
+    </form>
   </header>
   <main>
     {% with messages = get_flashed_messages(with_categories=true) %}

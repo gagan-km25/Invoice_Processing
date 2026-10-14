@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Approvals ({{ role }}){% endblock %}
+{% block content %}
+<section class="panel">
+  <h2>Approval queue <span class="status status-pending_approval">{{ role }}</span></h2>
+  <p class="hint">Invoices routed to you by amount (assignment §10:
+     &lt; ₹1,00,000 → manager, ≥ ₹1,00,000 → finance). Approve, or open a
+     record to reject it with a reason.</p>
+
+  {% if rows %}
+  <table class="invoice-table">
+    <thead>
+      <tr><th>ID</th><th>Invoice number</th><th>Vendor</th><th>Invoice date</th>
+          <th>Total</th><th>Submitted</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td><a href="{{ url_for('invoices.detail', invoice_id=row['id']) }}">#{{ row['id'] }}</a></td>
+        <td>{{ row['invoice_number'] or "—" }}</td>
+        <td>{{ row['vendor'] or "—" }}</td>
+        <td>{{ row['invoice_date'] or "—" }}</td>
+        <td>{{ row['total'] if row['total'] is not none else "—" }}</td>
+        <td>{{ row['updated_at'] or "—" }}</td>
+        <td class="cell-actions">
+          <form method="post" class="inline-form"
+                action="{{ url_for('approvals.approve', invoice_id=row['id']) }}">
+            <button type="submit">Approve</button>
+          </form>
+          <a class="button-link" href="{{ url_for('invoices.detail', invoice_id=row['id']) }}">Review / reject…</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty-state">No invoices are waiting for your approval.</p>
+  {% endif %}
+</section>
+{% endblock %}

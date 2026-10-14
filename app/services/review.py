@@ -27,6 +27,10 @@ HEADER_TEXT_FIELDS = (
     "vendor_tax_id",
     "invoice_number",
     "bill_to",
+    "po_number",
+    "bill_to_address",
+    "ship_to_name",
+    "ship_to_address",
 )
 DATE_FIELDS = ("invoice_date", "due_date")
 MONEY_FIELDS = ("subtotal", "discount", "tax", "total")
@@ -58,6 +62,7 @@ def parse_line_rows(form) -> list[dict]:
                 "quantity": _clean(form.get(f"quantity_{i}")),
                 "unit_price": _clean(form.get(f"unit_price_{i}")),
                 "amount": _clean(form.get(f"amount_{i}")),
+                "tax": _clean(form.get(f"tax_{i}")),
             }
         )
     return rows
@@ -144,7 +149,7 @@ def _validate_lines(form, errors: dict, warnings: list) -> list[dict]:
         label = f"line {row['i'] + 1}"
         if row["remove"]:
             continue
-        if not (row["description"] or row["quantity"] or row["unit_price"] or row["amount"]):
+        if not (row["description"] or row["quantity"] or row["unit_price"] or row["amount"] or row.get("tax")):
             continue  # blank row — silently ignored (AC-03.4)
         if not row["description"]:
             errors[f"description_{row['i']}"] = f"{label}: description is required."
@@ -164,6 +169,10 @@ def _validate_lines(form, errors: dict, warnings: list) -> list[dict]:
         if amount is None:
             errors[f"amount_{row['i']}"] = f"{label}: amount must be a number."
             continue
+        line_tax = parse_amount(row.get("tax", ""))
+        if row["tax"] and line_tax is None:
+            errors[f"tax_{row['i']}"] = f"{label}: tax must be a number."
+            continue
         if abs(quantity * unit_price - amount) > Decimal("0.01"):
             warnings.append(
                 f"{label}: amount ({amount}) does not match quantity × unit price "
@@ -175,6 +184,7 @@ def _validate_lines(form, errors: dict, warnings: list) -> list[dict]:
                 "quantity": quantity,
                 "unit_price": unit_price,
                 "amount": amount,
+                "tax": line_tax,
             }
         )
     for number, line in enumerate(kept, start=1):
@@ -226,6 +236,10 @@ def validate_and_merge(form):
         "invoice_date": fields.get("invoice_date"),
         "due_date": fields.get("due_date"),
         "bill_to": fields.get("bill_to"),
+        "bill_to_address": fields.get("bill_to_address"),
+        "ship_to_name": fields.get("ship_to_name"),
+        "ship_to_address": fields.get("ship_to_address"),
+        "po_number": fields.get("po_number"),
         "currency": fields.get("currency"),
         "subtotal": fields.get("subtotal"),
         "discount": fields.get("discount"),
@@ -260,6 +274,7 @@ def prefill_from_draft(draft: dict) -> tuple[dict, list[dict], dict]:
             "quantity": "" if line.get("quantity") is None else str(line["quantity"]),
             "unit_price": "" if line.get("unit_price") is None else str(line["unit_price"]),
             "amount": "" if line.get("amount") is None else str(line["amount"]),
+            "tax": "" if line.get("tax") is None else str(line["tax"]),
         }
         for index, line in enumerate(draft.get("lines", []))
     ]
@@ -272,7 +287,7 @@ def with_blank_rows(line_rows: list[dict], extra_blanks: int = 3) -> list[dict]:
     next_index = max((row["i"] for row in line_rows), default=-1) + 1
     return line_rows + [
         {"i": next_index + offset, "remove": False, "description": "",
-         "quantity": "", "unit_price": "", "amount": ""}
+         "quantity": "", "unit_price": "", "amount": "", "tax": ""}
         for offset in range(extra_blanks)
     ]
 

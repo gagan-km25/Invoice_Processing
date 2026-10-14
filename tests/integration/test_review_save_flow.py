@@ -150,12 +150,12 @@ def test_save_persists_corrections(app, client, make_pdf):
     invoice_id = _last_id(app)
     response = _save(client, invoice_id, _save_form(vendor="Acme Corporation (UK)",
                                                     total="1080.55", tax="80.55"))
-    assert b"saved" in response.data
+    assert b"Invoice #" in response.data  # "saved." flash (save succeeded)
     row = _rows(app, f"SELECT * FROM invoices WHERE id = {invoice_id}")[0]
     assert row["vendor"] == "Acme Corporation (UK)"
     assert row["total"] == 1080.55
     assert row["tax"] == 80.55
-    assert row["status"] == "saved"
+    assert row["status"] == "completed"  # E5: save keeps the lifecycle status
 
 
 def test_untouched_fields_keep_extraction_values(app, client, make_pdf):
@@ -261,7 +261,7 @@ def test_consistency_mismatch_warns_but_saves(app, client, make_pdf):
     response = _save(client, invoice_id, _save_form(total="9999.99"))
     assert b"does not match the total" in response.data
     row = _rows(app, f"SELECT * FROM invoices WHERE id = {invoice_id}")[0]
-    assert row["status"] == "saved" and row["total"] == 9999.99
+    assert row["status"] == "completed" and row["total"] == 9999.99
 
 
 def test_decimal_quantization_on_save(app, client, make_pdf):
@@ -334,15 +334,19 @@ def test_rollback_on_injected_repository_failure(app, monkeypatch):
     ]
 
 
-def test_double_submit_guard(app, client, make_pdf):
-    """TC-S3-I12 — saving an already-saved record is rejected, not duplicated."""
+def test_double_save_is_idempotent(app, client, make_pdf):
+    """TC-S3-I12 (E5 redefinition) — with the `saved` status removed,
+    re-saving a completed record re-persists its values and never creates
+    a second record."""
     _upload(client, make_pdf)
     invoice_id = _last_id(app)
     _save(client, invoice_id, _save_form())
-    response = client.post(f"/invoices/{invoice_id}/save",
-                           data=_save_form(), follow_redirects=True)
-    assert b"cannot be saved again" in response.data
-    assert len(_rows(app, "SELECT * FROM invoices WHERE status='saved'")) == 1
+    response = _save(client, invoice_id, _save_form(vendor="Acme Corporation 2"))
+    assert b"Invoice #" in response.data
+    rows = _rows(app, "SELECT * FROM invoices")
+    assert len(rows) == 1  # no record duplication
+    assert rows[0]["status"] == "completed"
+    assert rows[0]["vendor"] == "Acme Corporation 2"
 
 
 def test_extraction_json_unchanged_by_save(app, client, make_pdf):
@@ -370,8 +374,7 @@ def test_duplicate_requires_confirmation(app, client, make_pdf):
     blocked = _save(client, second_id, _save_form())
     assert b"Possible duplicate" in blocked.data
     assert b"Save anyway" in blocked.data
-    saved_count = len(_rows(app, "SELECT * FROM invoices WHERE status='saved'"))
-    assert saved_count == 1  # nothing new created
+    assert len(_rows(app, "SELECT * FROM invoices")) == 2  # nothing new created
 
     confirmed = client.post(
         f"/invoices/{second_id}/save",
@@ -379,7 +382,7 @@ def test_duplicate_requires_confirmation(app, client, make_pdf):
         follow_redirects=True,
     )
     assert b"Invoice #" in confirmed.data
-    assert len(_rows(app, "SELECT * FROM invoices WHERE status='saved'")) == 2
+    assert len(_rows(app, "SELECT * FROM invoices")) == 2
 
 
 def test_duplicate_vendor_number_only_not_hash(app, client, make_pdf):
@@ -411,12 +414,14 @@ def test_different_invoice_not_flagged(app, client, make_pdf):
 # ------------------------------------------------- success & security
 
 def test_success_flash_and_status(app, client, make_pdf):
-    """TC-S3-I17 — success message shown; record listed as saved (US-S3-07)."""
+    """TC-S3-I17 — success message shown; the record stays `completed`
+    (E5: save persists values, it no longer changes the lifecycle)."""
     _upload(client, make_pdf)
     invoice_id = _last_id(app)
     response = _save(client, invoice_id, _save_form())
     assert f"Invoice #{invoice_id} saved.".encode() in response.data
-    assert b"saved" in response.data  # status badge on home page
+    row = _rows(app, f"SELECT * FROM invoices WHERE id = {invoice_id}")[0]
+    assert row["status"] == "completed"
 
 
 def test_origin_check_blocks_cross_site_post(app, client, make_pdf):
@@ -440,24 +445,31 @@ def test_origin_check_blocks_cross_site_post(app, client, make_pdf):
 
 
 def test_service_level_duplicate_finder(app):
-    """TC-S3-I19 — find_saved_duplicates matches case-insensitively, saved only."""
+    """TC-S3-I19 (E5 redefinition) — find_duplicate_records matches
+    case-insensitively across ALL statuses, excluding the saved invoice."""
     with app.app_context():
         conn = get_db()
-        from app.db.repository import find_saved_duplicates, insert_invoice
-        saved = insert_invoice(conn, file_hash="h1", original_filename="o",
-                               stored_filename="s", status="saved")
-        insert_invoice(conn, file_hash="h2", original_filename="o2",
-                       stored_filename="s2", status="extracted")
+        from app.db.repository import find_duplicate_records, insert_invoice
+        first = insert_invoice(conn, file_hash="h1", original_filename="o",
+                               stored_filename="s", status="completed")
+        second = insert_invoice(conn, file_hash="h2", original_filename="o2",
+                                stored_filename="s2", status="uploaded")
         conn.execute(
             "UPDATE invoices SET vendor = 'Acme Corp', invoice_number = 'INV-1' "
-            "WHERE id = ?", (saved,))
+            "WHERE id = ?", (first,))
+        conn.execute(
+            "UPDATE invoices SET vendor = 'acme corp', invoice_number = 'inv-1' "
+            "WHERE id = ?", (second,))
         conn.commit()
-        # case-insensitive vendor + number match; drafts never count
-        dupes = find_saved_duplicates(conn, "acme corp", "inv-1")
-        drafts = find_saved_duplicates(conn, "nothing", "nowhere")
+        # case-insensitive vendor + number match in any status; self excluded
+        both = find_duplicate_records(conn, "ACME CORP", "INV-1")
+        others = find_duplicate_records(conn, "acme corp", "inv-1",
+                                        exclude_id=first)
+        none = find_duplicate_records(conn, "nothing", "nowhere")
         conn.close()
-    assert len(dupes) == 1 and dupes[0]["id"] == saved
-    assert drafts == []
+    assert {row["id"] for row in both} == {first, second}
+    assert [row["id"] for row in others] == [second]
+    assert none == []
 
 
 def test_validate_service_smoke_on_real_draft(app):
