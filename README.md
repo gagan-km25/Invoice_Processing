@@ -11,9 +11,9 @@ with a full audit history. Built as a complete, documented SDLC exercise.
   deployment.
 - Storage: SQLite (`data/invoices.db`, **schema v3**) + original files kept
   in `uploads/` (git-ignored).
-- Status: **enhancement sprints E0–E5 implemented and accepted (offline-
-  tested; uncommitted work — see Git note)**. Sprint E6 is documentation/
-  verification finalisation. **Live verification still pending:** the real
+- Status: **enhancement sprints E0–E5 implemented and accepted; E6
+  documentation/verification work committed** (offline-tested — live API
+  smoke, browser walkthrough and §23 demonstration still pending). **Live verification still pending:** the real
   GLM API smoke test and browser-level UI walkthrough (see
   [docs/16-e6-demo-script.md](docs/16-e6-demo-script.md) and
   [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md)).
@@ -29,7 +29,12 @@ with a full audit history. Built as a complete, documented SDLC exercise.
   local rules parser handles text PDFs. Scanned PDFs and images go through
   GLM vision on rasterised pages (≤ 3 pages). Malformed AI responses never
   crash the app — they fail safely with a recorded, user-safe reason.
-- **Business validation.** Mandatory fields (number, date, vendor,
+- **Business validation.** Currency extraction supports explicit labels
+  (`Currency: INR`) and amount tokens (`₹`, `Rs.`, `Rs`, `INR`, `$`, `€`,
+  `£`, `¥`) with Indian digit grouping (`1,25,000.00`), validated against
+  an offline ISO 4217 dataset (minor-unit aware: zero-decimal currencies
+  such as JPY keep their precision); ambiguous symbols (¥ = JPY or CNY)
+  are flagged, never guessed. Mandatory fields (number, date, vendor,
   currency, total); amount equations (`subtotal + tax = total`, or
   `subtotal − discount + tax = total` when a discount applies) with a
   configurable tolerance (default ₹0.01); date rules; GSTIN format check
@@ -126,7 +131,7 @@ Open **http://127.0.0.1:5000**. On first boot the app creates
 venv\Scripts\python -m pytest -q
 ```
 
-The suite (414 tests, all passing at the E5 checkpoint) always runs against
+The suite (448 tests, all passing) always runs against
 a **temporary** database and temp folders — real data is never touched.
 These are offline tests: they mock the GLM HTTP calls. The **live API smoke
 test and a browser-level walkthrough are still pending** (tracked in
@@ -194,6 +199,8 @@ Original v1 documents (preserved unmodified): `docs/01-requirements-analysis.md`
 - **OneDrive caution:** this folder is inside OneDrive sync. Sync locking can
   corrupt SQLite databases under heavy use. If you see DB errors, pause OneDrive
   while the app or tests run, or exclude this folder from sync.
-- **Git note:** sprints E0–E1 are committed; E2–E5 are accepted but still
-  uncommitted work awaiting the approved commit series.
+- **Git note:** all accepted sprint work is committed on branch
+  `enhancement/assignment` (E0 `daeb9c2`, E1 `b4bbee9`, E2 `c5d6bee`,
+  E3–E5 `795e5bf`, E6 documentation `c197e11`, parser fix `2e9b85a`) —
+  local only, no remote.
 - The git repo is **local only** — there is no remote.

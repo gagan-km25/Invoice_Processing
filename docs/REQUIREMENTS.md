@@ -42,14 +42,14 @@ through this table plus the §24 matrix in USER_STORIES.md.
 | R-020 | §5 | Lifecycle statuses incl. `failed` | US-E1-1 | E0/E1 | TC-SM-* | Done |
 | R-021 | §5 | Extraction failure → recorded, suitable state | US-E1-3 | E1 | TC-PIPE-FAIL-01..06 | Done |
 | R-022 | §5 | Reprocess for failed invoices | US-E1-3 | E1 | TC-PIPE-FAIL-06 | Done |
-| R-023 | §6 | §6 header fields extracted | US-E2-1/US-E3-3 | E2/E3 | TC-S2-*, TC-E3-XF-* | Done (offline) |
+| R-023 | §6 | §6 header fields extracted | US-E2-1/US-E3-3 | E2/E3 | TC-S2-*, TC-E3-XF-* | Done (offline) — currency validated against the offline ISO 4217 snapshot (164 active codes with minor-unit exponents incl. zero-decimal JPY/KRW); ambiguous symbols (¥) flagged, never guessed |
 | R-024 | §6 | Line items incl. per-line tax | US-E2-1/US-E3-3 | E2/E3 | TC-E3-XF-I01/I04 | Done (offline) |
 | R-025 | §6 | Scans/images processed via AI vision | US-E2-2 | E2 | TC-GLM-VISION/SCAN (offline) | Done (offline) |
 | R-026 | §6 | Raw AI response retained for traceability | US-E2-1 | E2 | TC-RAW-01, TC-RAW-02 UI | Done (offline) |
 | R-027 | §7 | Strict AI-response validation; safe failure | US-E2-2 | E2 | TC-RESP-* | Done |
 | R-028 | §7 | One re-ask before terminal failure | US-E2-2 | E2 | malformed-response test | Done |
 | R-029 | §8.1 | Mandatory fields (number/date/vendor/currency/total) | US-E3-1 | E3 | validation R1 suite | Done |
-| R-030 | §8.2 | Amount equations with configurable tolerance | US-E3-1 | E3 | R2/R6 + line-sum tests; docs/15 | Done |
+| R-030 | §8.2 | Amount equations with configurable tolerance | US-E3-1 | E3 | R2/R6 + line-sum tests; docs/15 | Done — amount parsing supports ₹/Rs./Rs/INR tokens and Indian digit grouping (1,25,000.00) as well as European decimal commas; split CGST/SGST/IGST component rows are summed and a combined tax row takes precedence (no double counting) |
 | R-031 | §8.3 | Date rules (≤ today; due ≥ invoice) | US-E3-1 | E3 | R4 tests | Done |
 | R-032 | §8.4 | GSTIN format check when present | US-E3-1 | E3 | R5 tests | Done |
 | R-033 | §8.5 | Verdicts Passed/Warning/Failed + findings | US-E3-1 | E3 | TC-E3-V*, detail panel | Done |
@@ -85,10 +85,10 @@ through this table plus the §24 matrix in USER_STORIES.md.
 | R-063 | §19 | Architecture document | US-E0-5 | E0 | ARCHITECTURE.md | Done |
 | R-064 | §19 | Testing document | US-E0-5 | E0 | TEST_PLAN.md | Done |
 | R-065 | §20 | Minimum repository structure (README, docs/ six, CLAUDE_USAGE) | US-E0-5/US-E6-2 | E0/E6 | verified present 2026-10-14 | Done |
-| R-066 | §22 | Meaningful messages; logical commits; branches | US-E0-1 | E0–E1 (E2–E5 pending) | E0/E1 commits | Partial — commit series requires authorisation |
+| R-066 | §22 | Meaningful messages; logical commits; branches | US-E0-1 | E0–E6 | E0/E1/E3–E5/E6 commits (`daeb9c2`, `b4bbee9`, `c5d6bee`, `795e5bf`, `c197e11`, `2e9b85a`) | Done — series recorded 2026-10-14 |
 | R-067 | §22 | No secrets committed | US-NFR-4 | E0 | TC-KEY-01, `.env` git-ignored | Done |
 | R-068 | §22 | Clear README | US-E6-2 | E6 | this rewrite | Done (review pending) |
-| R-069 | §22 | Clean project history | US-E0-1 | pending | commit series | Partial — authorisation required |
+| R-069 | §22 | Clean project history | US-E0-1 | E0–E6 | chronological per-sprint commits on `enhancement/assignment` | Done — recorded 2026-10-14 |
 | R-070 | §23 | Functional demonstration (items 1–8) | US-E6-4 | E6 | docs/16 script | Pending authorisation |
 | R-071 | §23 | Technical walkthrough | US-E6-4 | E6 | docs/16 Part 2 | Pending authorisation |
 | R-072 | §23 | Claude Code usage demonstration | US-E6-4 | E6 | docs/16 Part 3 | Pending authorisation |

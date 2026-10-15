@@ -93,6 +93,24 @@ references preserved per fixture). KNOWN_ISSUES K-7 resolved. Sprint 3/4
 saved-flow tests were redefined by the approved E5 scope. Full suite at
 E5 completion: **414 passed, 0 failed**.
 
+Sprint E6 close execution records (general-INR parser work, ISO 4217
+currency dataset, split-GST summation, F1 guard) — all on the current tree:
+- Line-item fix close: **421 passed, 0 failed** (TC-E6-L01..L06).
+- General-INR parser close: **428 passed, 0 failed** (TC-E6-F01..F13;
+  test_normalize.py amount/token matrix; comma-group disambiguation rule;
+  CGST/SGST/IGST summary handling; item-header vendor guard extension).
+- F1 ambiguous-currency guard: **447 passed, 0 failed** (TC-E6-C06..C08).
+- Latest recorded run: **448 passed, 0 failed** — adds TC-E6-C09
+  (parse()-seam line-amount guard) and test_currencies.py (ISO 4217 dataset
+  integrity). New offline artefacts: app/services/parser/currencies.py
+  (ISO 4217 snapshot, 164 active codes with minor-unit exponents including
+  zero-decimal JPY/KRW/… and 3-decimal KWD/BHD/…), INR currency tokens
+  (₹/Rs./Rs/INR, including Indian digit grouping) in
+  detect_currency_symbol, European/Indian comma-group disambiguation in
+  parse_amount, split CGST/SGST/IGST tax summation with combined-row
+  precedence, and the F1 guard (minor-unit normalization only on a
+  confirmed currency — ambiguous values never requantize).
+
 ### Assignment §16 coverage map (E6 reconciliation, recorded 2026-10-14)
 
 Negative cases — each maps to named, passing tests:

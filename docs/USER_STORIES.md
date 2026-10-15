@@ -508,7 +508,7 @@ logging**
 
 | AC | Criterion (abridged) | Covered by | Status |
 |---|---|---|---|
-| 1 | Application enhanced | E0–E6 collectively | **Done (E0–E5 implemented and accepted; uncommitted)** — remaining: E6 documentation/demo finalisation and the commit series (AC-20) |
+| 1 | Application enhanced | E0–E6 collectively | **Done (E0–E5 implemented, accepted and committed)** — remaining: E6 live verification only (GLM smoke, browser walkthrough, §23 demonstration) |
 | 2 | Required file types | US-E2-3 | **Done (offline-tested)** — live vision path awaits the recorded smoke (US-E2-4) |
 | 3 | Upload does not block | US-E1-2 | **PASS** (TC-ASYNC-01) |
 | 4 | Processing status available | US-E1-2 | **PASS** (TC-ASYNC-02) |
@@ -524,15 +524,14 @@ logging**
 | 14 | Audit history | US-E0-4/US-E1-4/US-E5-2 | **Done (E5)** — events recorded since E0/E1; audit-timeline UI delivered (TC-DETAIL-01) |
 | 15 | List/detail/filtering | US-E5-1/2 | **Done (E5)** — TC-LIST-01..05, TC-DETAIL-01..04, TC-RAW-02 UI half |
 | 16 | Safe error handling & logging | US-E1-5 | **PASS** (TC-ERR/LOG/KEY/RAW) |
-| 17 | Automated tests | all sprints | **PASS** — 414 passed / 0 failed (recorded at E5 acceptance; the final count will be re-recorded at E6 completion) |
+| 17 | Automated tests | all sprints | **PASS** — 448 passed / 0 failed (latest recorded, E6 close pending; progression 414 → 421 → 428 → 447 → 448 recorded in TEST_PLAN) |
 | 18 | SDLC documentation | US-E0-5/US-E6-2 | **Partial** — all §19 documents exist and are current through E5; final accuracy sweep + §16/§24 mappings recorded this revision |
 | 19 | Claude Code usage documented | US-E6-3 | **Partial** — genuine entries through E2; E3–E5 events identified this revision, being appended |
-| 20 | Git practices | US-E0-1 + sprint discipline | **Partial** — explicit-path staging discipline held, but E2–E5 work is uncommitted by user instruction; commit series requires authorisation |
+| 20 | Git practices | US-E0-1 + sprint discipline | **Done (AC-20)** — chronological per-sprint commits executed with explicit-path staging (E0 `daeb9c2`, E1 `b4bbee9`, E2 `c5d6bee`, E3–E5 `795e5bf`, E6 docs `c197e11`, parser fix `2e9b85a`); no secrets committed |
 | 21 | End-to-end demonstration | US-E6-4 | **Not verified** — demo script drafted (docs/16); run requires app-launch + live-smoke authorisation |
 
 **Known gaps (remaining, all authorisation-gated):** AC-2/5 live GLM smoke;
-AC-21 demonstration run; AC-20 commit series. No offline criterion is
-pending.
+AC-21 demonstration run. No offline criterion is pending.
 
 ---
 
