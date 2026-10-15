@@ -67,6 +67,9 @@ DISCOUNT_LABELS = [
 ]
 
 TAX_LABELS = [
+    "cgst",
+    "sgst",
+    "igst",
     "gst",
     "vat",
     "sales tax",
@@ -88,7 +91,9 @@ TOTAL_LABELS = [
 # A line starting like this is the item-table header — stops bill-to capture.
 ITEM_HEADER_PREFIXES = ("#",)
 
-ITEM_HEADER_KEYWORDS = ("description", "qty", "unit price", "amount")
+ITEM_HEADER_KEYWORDS = (
+    "description", "qty", "quantity", "unit price", "rate", "amount",
+)
 
 # Explicit currency label (e.g. "Currency: INR") — verified real layout
 # (CPS-INV-5099) prints plain-number amounts with no glyph, plus this label.

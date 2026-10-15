@@ -246,3 +246,215 @@ def test_vendor_table_after_items_table_still_found():
     fields = build_fields(REALISTIC_TEXT, tables)
     assert fields["vendor"]["status"] == "found"
     assert fields["vendor"]["value"] == "TechNova Retail Pvt. Ltd."
+
+
+# --------------------------------------- Sprint E6 general-INR matrix
+
+RUPEE_TEXT = """TAX INVOICE
+CloudPeak Systems Invoice No: CPS-2026-1
+Invoice Date: 2026-10-05
+GSTIN: 29WXYZA7890B1Z6
+Subtotal ₹1,25,000.00
+GST (18%) ₹22,500.00
+Total ₹1,47,500.00"""
+
+
+def test_rupee_glyph_amounts_resolve_inr_without_label():
+    """TC-E6-F08 — grouped rupee amounts carry the currency signal even
+    without an explicit label or GSTIN-based inference."""
+    fields = build_fields(RUPEE_TEXT, [])
+    assert fields["currency"] == {"status": "found", "value": "INR"}
+    assert fields["subtotal"]["value"] == Decimal("125000.00")
+    assert fields["total"]["value"] == Decimal("147500.00")
+
+
+def test_rs_dot_amounts_resolve_inr_without_label():
+    """TC-E6-F09 — 'Rs.' notation parses and signals INR (G1 + G2 fix)."""
+    text = RUPEE_TEXT.replace("Subtotal 1,25,000.00", "Subtotal Rs. 1,25,000.00")
+    text = text.replace("Total 1,47,500.00", "Total Rs. 1,47,500.00")
+    fields = build_fields(text, [])
+    assert fields["currency"]["value"] == "INR"
+    assert fields["subtotal"]["value"] == Decimal("125000.00")
+
+
+def test_plain_numbers_without_label_or_gstin_stay_missing():
+    """TC-E6-F10 — plain-number amounts with no label, glyph or GST context
+    are NEVER defaulted to INR (missing, not guessed)."""
+    text = """INVOICE
+Somebody Ltd Invoice No: X-1
+Invoice Date: 2026-10-05
+Subtotal 100.00
+Tax 8.00
+Total 108.00"""
+    fields = build_fields(text, [])
+    assert fields["currency"]["status"] == "missing"
+
+
+def test_unknown_glyph_without_gst_context_is_ambiguous():
+    """TC-E6-F11 — an unmapped glyph with no GST context: ambiguous with
+    evidence, value None (never a guessed currency)."""
+    text = """INVOICE
+Somebody Ltd Invoice No: X-1
+Invoice Date: 2026-10-05
+Subtotal x100.00
+Total x108.00"""
+    fields = build_fields(text, [])
+    assert fields["currency"]["status"] == "ambiguous"
+    assert fields["currency"]["value"] is None  # no GST context → no guess
+
+
+def test_conflicting_label_wins_over_glyph():
+    """TC-E6-F12 — '$' amounts with an explicit 'Currency: INR' label: the
+    explicit label wins (documented precedence, deterministic)."""
+    text = REALISTIC_TEXT + "\nCurrency: INR"
+    fields = build_fields(text, [])
+    assert fields["currency"]["status"] == "found"
+    assert fields["currency"]["value"] == "INR"
+
+
+def test_quantity_rate_header_cells_rejected_as_vendor():
+    """TC-E6-F13 — an items table whose header cell starts with
+    'Quantity'/'Rate' variants is never the vendor; the real vendor line is
+    found via the geometric fallback (ambiguous, per honesty model)."""
+    text = """Quantum Supplies
+Quantity Rate Amount
+Item One 2 10.00 20.00
+Subtotal 20.00
+Total 20.00"""
+    tables = [[["Quantity", "Rate", "Amount"],
+               ["Item One", "2", "20.00"]]]
+    fields = build_fields(text, tables)
+    assert fields["vendor"]["value"] == "Quantum Supplies"
+    assert fields["vendor"]["status"] == "ambiguous"
+
+
+# ------------------------------------- ISO 4217 + zero-decimal currencies
+
+JPY_TEXT = """TAX INVOICE
+Nippon Kiki Ltd Invoice No: JP-1
+Invoice Date: 2026-10-05
+Currency: JPY
+Subtotal ¥12,000
+Tax ¥1,200
+Total ¥13,200"""
+
+
+def test_jpy_explicit_label_zero_decimal():
+    """TC-E6-C01 — explicit JPY label: currency found and headline amounts
+    requantized to the zero-decimal exponent (not forced to 2dp)."""
+    fields = build_fields(JPY_TEXT, [])
+    assert fields["currency"]["status"] == "found"
+    assert fields["currency"]["value"] == "JPY"
+    assert fields["total"]["value"] == Decimal("13200")
+    assert fields["total"]["value"].as_tuple().exponent == 0
+
+
+def test_jpy_symbol_ambiguous_jpy_vs_cny():
+    """TC-E6-C02 — the ¥ symbol alone is ambiguous (JPY vs CNY): ambiguous
+    with evidence, never guessed."""
+    text = """TAX INVOICE
+Nippon Kiki Ltd Invoice No: JP-2
+Invoice Date: 2026-10-05
+Subtotal ¥12,000
+Total ¥13,200"""
+    fields = build_fields(text, [])
+    assert fields["currency"]["status"] == "ambiguous"
+    assert fields["currency"]["value"] == "JPY"
+    assert "CNY" in fields["currency"]["evidence"]
+
+
+def test_unknown_iso_label_is_ambiguous_not_found():
+    """TC-E6-C03 — a 3-letter label that is NOT an ISO 4217 code is
+    surfaced as ambiguous with the code as value (never a silent found)."""
+    text = REALISTIC_TEXT + "\nCurrency: XYZ"
+    fields = build_fields(text, [])
+    assert fields["currency"]["status"] == "ambiguous"
+    assert fields["currency"]["value"] == "XYZ"
+    assert "ISO 4217" in fields["currency"]["evidence"]
+
+
+def test_iso_label_matrix():
+    """TC-E6-C04 — explicit ISO labels resolve for the required set and an
+    additional code (AUD, CHF)."""
+    for code in ("JPY", "INR", "USD", "EUR", "GBP", "AUD", "CHF"):
+        fields = build_fields(REALISTIC_TEXT + f"\nCurrency: {code}", [])
+        assert fields["currency"]["status"] == "found", code
+        assert fields["currency"]["value"] == code
+
+
+def test_dollar_convention_unchanged():
+    """TC-E6-C05 — the '$' glyph keeps its documented primary convention
+    (USD): existing invoices and tests are unaffected."""
+    fields = build_fields(REALISTIC_TEXT, [])
+    assert fields["currency"]["status"] == "ambiguous"  # mojibake glyph 'n'
+
+
+def test_ambiguous_yen_does_not_requantize_amounts():
+    """TC-E6-C06 (F1 regression) — an ambiguous ¥ currency (JPY vs CNY)
+    must NOT trigger zero-decimal normalization: ¥12,345.67 keeps its
+    decimals in the draft."""
+    text = """TAX INVOICE
+Nippon Kiki Ltd Invoice No: JP-2
+Invoice Date: 2026-10-05
+Subtotal ¥12,345.67
+Total ¥12,345.67"""
+    fields = build_fields(text, [])
+    assert fields["currency"]["status"] == "ambiguous"
+    assert fields["currency"]["value"] == "JPY"
+    for name in ("subtotal", "total"):
+        value = fields[name]["value"]
+        assert value == Decimal("12345.67"), name
+        assert value.as_tuple().exponent == -2, name
+
+
+def test_unknown_iso_ambiguous_does_not_requantize():
+    """TC-E6-C07 (F1 regression) — an unknown 3-letter label (ambiguous)
+    must not trigger exponent normalization either."""
+    text = REALISTIC_TEXT + "\nCurrency: XYZ"
+    fields = build_fields(text, [])
+    assert fields["currency"]["status"] == "ambiguous"
+    assert fields["currency"]["value"] == "XYZ"
+    for name in ("subtotal", "total"):
+        value = fields[name]["value"]
+        assert value == Decimal("6550.00") or value == Decimal("7729.00")
+        assert value.as_tuple().exponent == -2, name
+
+
+def test_confirmed_jpy_still_normalizes():
+    """TC-E6-C08 — the explicit 'Currency: JPY' path keeps zero-decimal
+    normalization (F1 fix must not break the confirmed case)."""
+    fields = build_fields(JPY_TEXT, [])
+    assert fields["currency"]["status"] == "found"
+    assert fields["total"]["value"] == Decimal("13200")
+    assert fields["total"]["value"].as_tuple().exponent == 0
+
+
+def test_parse_ambiguous_yen_keeps_line_amount_decimals():
+    """TC-E6-C09 (F1 regression, parse() seam) — an ambiguous ¥ currency
+    must not trigger zero-decimal normalization on LINE amounts either:
+    unit_price and amount keep Decimal('12345.67') at exponent -2, with no
+    rounding or truncation."""
+    from app.services.parser import parse
+
+    text = """TAX INVOICE
+Nippon Kiki Ltd Invoice No: JP-2
+Invoice Date: 2026-10-05
+Description Qty Unit Price Amount
+Widget 1 12345.67 12345.67
+Subtotal ¥12,345.67
+Total ¥12,345.67"""
+    tables = [[["Description", "Qty", "Unit Price", "Amount"],
+               ["Widget", "1", "12345.67", "12345.67"]]]
+
+    draft = parse(text, tables, page_count=1)
+
+    currency = draft["fields"]["currency"]
+    assert currency["status"] == "ambiguous"
+    assert currency["value"] == "JPY"
+
+    assert len(draft["lines"]) == 1
+    line = draft["lines"][0]
+    assert line["unit_price"] == Decimal("12345.67")
+    assert line["amount"] == Decimal("12345.67")
+    assert line["unit_price"].as_tuple().exponent == -2
+    assert line["amount"].as_tuple().exponent == -2

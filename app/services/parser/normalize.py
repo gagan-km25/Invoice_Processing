@@ -11,7 +11,10 @@ from decimal import Decimal, InvalidOperation
 _WHITESPACE = re.compile(r"\s+")
 
 ISO_CODES = {"USD", "EUR", "GBP", "INR", "AUD", "CAD", "SGD", "AED", "JPY"}
-SYMBOL_TO_CODE = {"$": "USD", "€": "EUR", "£": "GBP", "₹": "INR", "¥": "JPY"}
+SYMBOL_TO_CODE = {
+    "$": "USD", "€": "EUR", "£": "GBP", "₹": "INR", "¥": "JPY",
+    "INR": "INR", "Rs.": "INR", "Rs": "INR",
+}
 
 
 def clean(value) -> str:
@@ -87,11 +90,18 @@ def parse_amount(value) -> Decimal | None:
     negative = text.startswith("(") and text.endswith(")")
     text = text.strip("()")
     text = re.sub(r"[^0-9,.\-]", "", text)  # drop symbols/letters/glyphs
+    text = text.lstrip(".,")  # 'Rs. 1,25,000.00' leaves '.125000.00' here
     if not re.search(r"\d", text):
         return None
     last_dot, last_comma = text.rfind("."), text.rfind(",")
-    if last_comma > last_dot:  # European decimal comma: 1.234,56
-        text = text.replace(".", "").replace(",", ".")
+    if last_comma > last_dot:
+        # European decimal comma: 1.234,56 — but ONLY when the final comma
+        # group is a plausible decimal (≤2 digits). '13,200' (3 digits) is a
+        # thousands separator, not 13.2 (verified: zero-decimal JPY amounts).
+        if len(text) - last_comma - 1 <= 2:
+            text = text.replace(".", "").replace(",", ".")
+        else:
+            text = text.replace(",", "")
     else:  # US: 1,234.56
         text = text.replace(",", "")
     try:
@@ -104,13 +114,23 @@ def parse_amount(value) -> Decimal | None:
 
 
 def detect_currency_symbol(amount_text) -> str | None:
-    """A currency glyph attached to an amount, e.g. '$1,234.56', 'n1,250.00'.
+    """A currency token attached to an amount.
 
-    A bare letter counts only when glued directly to a well-formed number
-    ('n1250.00'), which is the mojibake pattern — never in prose.
+    Recognised: single glyphs with US-grouped or Indian-grouped digits
+    ('$1,234.56', '₹1,25,000.00'), word tokens ('INR 4,500.00', 'Rs. 500',
+    'Rs.1,25,000.00'), the mojibake pattern ('n1250.00' — bare letter glued
+    to a well-formed number, never in prose), and a trailing glyph
+    ('1,179.00 ₹').
     """
     text = clean(amount_text)
-    match = re.match(r"^([$€£₹¥A-Za-z])\s*\d{1,3}(?:[,\.\ ]\d{3})*(?:\.\d{2})?$", text)
+    match = re.match(r"^(INR|RS\.?)\s*(?=\d)", text, re.IGNORECASE)
+    if match:
+        token = match.group(1).upper()
+        return {"RS": "Rs.", "RS.": "Rs."}.get(token, token)
+    match = re.match(r"^([$€£₹¥])\s*(?:\d{1,3}(?:,\d{2,3})+|\d+)(?:\.\d{2})?$", text)
+    if match:
+        return match.group(1)
+    match = re.match(r"^([A-Za-z])\s*\d{1,3}(?:[,\.\ ]\d{3})*(?:\.\d{2})?$", text)
     if match:
         return match.group(1)
     match = re.search(r"\d(?:[,\.\ ]\d{3})*(?:\.\d{2})?\s*([$€£₹¥])$", text)
@@ -128,6 +148,13 @@ def resolve_currency(
     context → INR flagged ambiguous (evidence recorded); unknown glyph alone →
     ambiguous with raw glyph; nothing → missing.
     """
+    if "¥" in seen_symbols:
+        # Ambiguous symbol (JPY vs CNY) — never guessed (Sprint E6).
+        return (
+            "JPY",
+            "ambiguous",
+            "¥ symbol denotes JPY or CNY — please confirm",
+        )
     for symbol in seen_symbols:
         if not symbol:
             continue

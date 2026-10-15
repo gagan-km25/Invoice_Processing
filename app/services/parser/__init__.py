@@ -9,7 +9,7 @@ garbage input yields an all-missing draft, never an exception (NFR-4, AC-2.3).
 """
 from decimal import Decimal
 
-from . import fields as _fields
+from . import currencies, fields as _fields
 from .lines import extract_line_items
 from .normalize import clean
 
@@ -123,4 +123,17 @@ def parse(text: str, tables: list, page_count: int | None = None) -> dict:
         for item in items
     ]
     draft["checks"] = _consistency_checks(draft["fields"], draft["lines"])
+
+    # Zero-decimal currencies: requantize line amounts to the currency's
+    # minor-unit exponent (JPY → 0 decimals, not forced to 2). F1: only on
+    # a CONFIRMED currency — ambiguous values never requantize.
+    currency_field = draft["fields"].get("currency") or {}
+    code = currency_field.get("value") if currency_field.get("status") == "found" else None
+    exponent = currencies.exponent_for(code) if code else None
+    if exponent is not None and exponent != 2:
+        quantum = Decimal(1).scaleb(-exponent)
+        for line in draft["lines"]:
+            for key in ("unit_price", "amount"):
+                if isinstance(line.get(key), Decimal):
+                    line[key] = line[key].quantize(quantum)
     return draft

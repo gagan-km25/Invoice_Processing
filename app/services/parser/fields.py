@@ -10,8 +10,9 @@ non-alphanumeric boundary after the label so 'GST…' never matches 'GSTIN'
 (verified failure mode during Sprint 2 bring-up).
 """
 import re
+from decimal import Decimal
 
-from . import labels
+from . import currencies, labels
 from .normalize import (
     clean,
     detect_currency_symbol,
@@ -169,6 +170,44 @@ def extract_tax_rate(tax_context: str | None) -> float | None:
     return float(match.group(1)) if match else None
 
 
+def _collect_tax_matches(lines: list[str]) -> list[tuple[str, str, str, Decimal]]:
+    """Every tax-labelled summary row with a parseable amount:
+    (context_line, matched label, raw value part, amount). Split-GST
+    layouts list CGST/SGST/IGST components on separate rows (§6)."""
+    matches: list[tuple[str, str, str, Decimal]] = []
+    for line in lines:
+        low = line.lower()
+        label = _match_label(low, labels.TAX_LABELS)
+        if label is None:
+            continue
+        rest = line[low.find(label) + len(label):].strip(" :")
+        value_part = re.sub(r"\([^)]*%\)", " ", rest)
+        amount = parse_amount(value_part)
+        if amount is not None:
+            matches.append((line, label, value_part, amount))
+    return matches
+
+
+def _resolve_tax(
+    matches: list[tuple[str, str, str, Decimal]],
+) -> tuple[str | None, str | None, Decimal | None]:
+    """(context, raw value part, tax amount) for the invoice.
+
+    Split-GST layouts (§6) list CGST/SGST/IGST components separately: the
+    components are SUMMED. A combined GST/Tax/VAT row alongside components
+    is never double-counted — the invoice's own combined tax row wins.
+    A single row keeps the exact pre-existing behaviour."""
+    if not matches:
+        return None, None, None
+    components = [m for m in matches if m[1] in ("cgst", "sgst", "igst")]
+    combined = [m for m in matches if m[1] not in ("cgst", "sgst", "igst")]
+    if components and not combined:
+        total = sum((m[3] for m in components), Decimal("0.00"))
+        return components[0][0], components[0][2], total.quantize(Decimal("0.01"))
+    first = combined[0] if combined else matches[0]
+    return first[0], first[2], first[3]
+
+
 def _attempt(strategy, *args, default=None):
     """Per-strategy containment: a crash marks that piece missing with a note
     instead of blanking the whole parse (NFR-4)."""
@@ -259,9 +298,8 @@ def build_fields(text: str, tables) -> dict:
         found(discount, raw=discount_val) if discount is not None else missing()
     )
 
-    tax_ctx, tax_val, tax = _attempt(
-        find_summary_amount, lines, labels.TAX_LABELS, default=(None, None, None)
-    )
+    tax_matches = _collect_tax_matches(lines)
+    tax_ctx, tax_val, tax = _resolve_tax(tax_matches)
     fields["tax"] = found(tax, raw=tax_val) if tax is not None else missing()
     fields["tax_rate"] = _as_field(_attempt(extract_tax_rate, tax_ctx))
 
@@ -275,7 +313,16 @@ def build_fields(text: str, tables) -> dict:
     label_value = find_labeled_value(lines, labels.CURRENCY_LABELS)
     label_code = label_value.strip().upper() if label_value else None
     if label_code and len(label_code) == 3 and label_code.isalpha():
-        fields["currency"] = found(label_code, raw=label_value)
+        if currencies.is_known_code(label_code):
+            fields["currency"] = found(label_code, raw=label_value)
+        else:
+            fields["currency"] = ambiguous(
+                label_code,
+                evidence=(
+                    f"{label_code!r} is not a known ISO 4217 code — "
+                    "please confirm"
+                ),
+            )
     elif label_value:
         fields["currency"] = ambiguous(
             None,
@@ -301,6 +348,22 @@ def build_fields(text: str, tables) -> dict:
             fields["currency"] = ambiguous(currency, evidence=evidence)
         else:
             fields["currency"] = found(currency)
+
+    # Zero-decimal currencies (JPY, KRW, …) are not forced to two decimals:
+    # requantize the headline amounts to the currency's minor-unit exponent
+    # (Sprint E6, ISO 4217 dataset).
+    # F1: normalization only on a CONFIRMED currency — an ambiguous value
+    # (¥ = JPY or CNY; unknown ISO code) must not trigger requantization.
+    resolved = None
+    if fields["currency"].get("status") == "found":
+        resolved = fields["currency"].get("value")
+    exponent = currencies.exponent_for(resolved) if resolved else None
+    if exponent is not None and exponent != 2:
+        quantum = Decimal(1).scaleb(-exponent)
+        for name in ("subtotal", "discount", "tax", "total"):
+            field = fields.get(name)
+            if isinstance(field, dict) and isinstance(field.get("value"), Decimal):
+                field["value"] = field["value"].quantize(quantum)
 
     return fields
 

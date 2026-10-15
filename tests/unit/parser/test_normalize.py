@@ -1,6 +1,8 @@
 """Sprint 2 unit tests — normalization primitives (dates, amounts, currency,
 invoice numbers, whitespace). IDs TC-S2-N01… (catalogued in docs/04).
 """
+import pytest
+
 from decimal import Decimal
 
 from app.services.parser.normalize import (
@@ -154,3 +156,56 @@ def test_invoice_number_requires_digit():
 def test_clean_collapses_whitespace():
     """TC-S2-N27 — runs, tabs, NBSP collapse to single spaces."""
     assert clean("  a\t\tb  c  d ") == "a b c d"
+
+
+# ------------------------------------------------- Sprint E6: INR
+# currency tokens, Indian digit grouping, comma-group disambiguation.
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("Rs. 1,25,000.00", "125000.00"),   # G1: 'Rs.' dot artefact
+    ("₹1,25,000.00", "125000.00"),      # glyph + Indian grouping
+    ("INR 4,500.00", "4500.00"),        # word token + grouping
+    ("INR32,200.00", "32200.00"),       # glued word token
+    ("Rs 500", "500.00"),               # space-separated token
+    ("1,25,000.00", "125000.00"),       # bare Indian grouping
+    ("32,200.00", "32200.00"),
+    ("$1,234.56", "1234.56"),           # US preserved
+    ("1.234,56", "1234.56"),            # European preserved
+])
+def test_parse_amount_indian_and_existing_formats(text, expected):
+    assert parse_amount(text) == Decimal(expected)
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("₹1,25,000.00", "₹"),          # glyph + Indian grouping (was None)
+    ("Rs. 500", "Rs."),             # word token (was None)
+    ("Rs 500", "Rs."),              # word token, no dot (was None)
+    ("INR 4,500.00", "INR"),        # ISO word token (was None)
+    ("INR32,200.00", "INR"),        # glued ISO token (was None)
+    ("n1,250.00", "n"),             # mojibake pattern preserved
+    ("$1,234.56", "$"),             # glyph preserved
+])
+def test_detect_currency_symbol_tokens(text, expected):
+    assert detect_currency_symbol(text) == expected
+
+
+def test_detect_ignores_labels_and_plain_numbers():
+    """'Currency: INR' is handled by the label rule, not the amount-token
+    detector; plain numbers carry no signal."""
+    assert detect_currency_symbol("Currency: INR") is None
+    assert detect_currency_symbol("32,200.00") is None
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("13,200", "13200"),       # zero-decimal grouped: thousands, not 13.2
+    ("12,000", "12000"),       # same rule
+    ("1,25,000", "125000"),    # Indian grouping without decimals
+    ("12,5", "12.50"),         # 1-digit final group → decimal comma
+    ("1.234,56", "1234.56"),   # European decimal comma (2-digit group)
+])
+def test_comma_group_disambiguation(text, expected):
+    """The final comma group is a decimal separator only when it has ≤2
+    digits; 3-digit groups are thousands separators (zero-decimal and
+    Indian-grouping safety rule, Sprint E6)."""
+    assert parse_amount(text) == Decimal(expected)
