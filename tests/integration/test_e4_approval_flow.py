@@ -407,3 +407,54 @@ def test_full_lifecycle_walk(
     client.post("/invoices/1/submit")
     assert _row(app, 1)["status"] == "approved"
     assert _audit_count(app, 1) == before
+
+
+def test_reprocess_button_visibility_matches_role_map(
+    app, client, worker, pdf_storage, monkeypatch, set_role
+):
+    """TC-E6-A01/A02 (F-template regression) — the reprocess action is
+    vendor-only per ARCHITECTURE §6: the vendor's detail page shows the
+    button; an approver's detail page hides it (previously the button was
+    rendered to approvers whose POST then hit the route's 403 guard)."""
+    def fake(invoice_id):
+        conn = get_db()
+        try:
+            from app.db.repository import update_extraction
+            from tests.integration.test_e4_approval_flow import _draft
+
+            update_extraction(conn, invoice_id, draft=_draft(),
+                              write_lines=True)
+        finally:
+            conn.close()
+        return True, "stubbed"
+
+    monkeypatch.setattr(extraction, "extract_stored_invoice", fake)
+    storage = pdf_storage("role-map.pdf")
+    client.post("/upload",
+                data={"file": (io.BytesIO(storage.read()), "role-map.pdf")},
+                content_type="multipart/form-data")
+    worker.run_pending()
+    row = _row(app, 1)
+    conn = _conn(app)
+    try:
+        conn.execute("UPDATE invoices SET status = 'failed' WHERE id = 1")
+        conn.commit()
+    finally:
+        conn.close()
+
+    # vendor: button present
+    set_role(ROLE_VENDOR)
+    vendor_html = client.get("/invoices/1").data.decode()
+    assert "Reprocess this invoice" in vendor_html
+
+    # approver: button absent
+    set_role(ROLE_MANAGER)
+    approver_html = client.get("/invoices/1").data.decode()
+    assert "Reprocess this invoice" not in approver_html
+
+    # route backstop unchanged: approver POST still 403 with zero writes
+    before = _audit_count(app, 1)
+    response = client.post("/invoices/1/reprocess")
+    assert response.status_code == 403
+    assert _row(app, 1)["status"] == "failed"
+    assert _audit_count(app, 1) == before
