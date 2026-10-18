@@ -5,6 +5,7 @@ Flask==3.1.3
 pdfplumber==0.11.10
 pytest==9.1.1
 requests==2.34.2  # Sprint E2: GLM (Z.ai) extraction client
+python-dotenv==1.2.4  # Sprint E6: loads .env for GLM configuration (app/__init__.py)
 
 # Bonus tier (Sprint X — OCR only, gated per T-I). Not installed; requires the
 # Tesseract binary separately. pypdfium2 (page rasterizer) is already present

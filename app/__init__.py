@@ -1,13 +1,20 @@
+
 """Invoice Extractor — app factory.
 
 Local-only web application for uploading invoices, extracting their details,
 reviewing them, and storing them in a local database. Architecture and sprint
 plan: docs/03-plan.md.
 """
+from pathlib import Path
 from urllib.parse import urlsplit
 
+from dotenv import load_dotenv
 from flask import Flask, flash, redirect, render_template, request, url_for
 from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
+
+# Load environment variables before importing Config.
+BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
 
 from app.config import Config
 from app.db import init_db

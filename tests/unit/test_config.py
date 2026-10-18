@@ -42,17 +42,28 @@ def test_env_overrides_ai_settings(monkeypatch):
         importlib.reload(cfg)
 
 
-def test_defaults_contain_no_key_material():
-    """No configured default may look like a real API key."""
-    for name, value in vars(Config).items():
-        if not name.startswith("ZAI"):
-            continue
-        if name == "ZAI_API_KEY":
-            assert value == "", "ZAI_API_KEY must default to empty"
-        else:
-            assert not re.fullmatch(r"[A-Za-z0-9._\-]{24,}", str(value)), (
-                f"{name} default looks like credential material"
-            )
+def test_defaults_contain_no_key_material(monkeypatch):
+    """No configured default may look like a real API key.
+
+    The runtime loads ZAI_API_KEY from the developer's .env by design
+    (load_dotenv in app/__init__.py); this test isolates the module from
+    the environment to verify the committed source default is empty."""
+    monkeypatch.delenv("ZAI_API_KEY", raising=False)
+    import app.config as cfg
+
+    importlib.reload(cfg)
+    try:
+        for name, value in vars(cfg).items():
+            if not name.startswith("ZAI"):
+                continue
+            if name == "ZAI_API_KEY":
+                assert value == "", "ZAI_API_KEY must default to empty"
+            else:
+                assert not re.fullmatch(r"[A-Za-z0-9._\-]{24,}", str(value)), (
+                    f"{name} default looks like credential material"
+                )
+    finally:
+        importlib.reload(cfg)  # restore runtime state for other tests
 
 
 def test_env_example_has_placeholders_and_env_is_ignored():

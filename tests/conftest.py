@@ -31,6 +31,11 @@ def _test_config(tmp_path):
         DATABASE=tmp_path / "data" / "invoices.db",
         WORKER_AUTOSTART=False,
         WORKER_RETRY_BACKOFF_SECONDS=0,
+        # Offline determinism: the developer's real .env (loaded via
+        # load_dotenv in app/__init__.py) must never leak a live GLM key
+        # into the test config — tests that need a configured key set one
+        # explicitly (e.g. _configure_key in the GLM integration tests).
+        ZAI_API_KEY="",
     )
     return SimpleNamespace(**base)
 
