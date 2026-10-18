@@ -131,7 +131,7 @@ Open **http://127.0.0.1:5000**. On first boot the app creates
 venv\Scripts\python -m pytest -q
 ```
 
-The suite (448 tests, all passing) always runs against
+The suite (478 tests, all passing) always runs against
 a **temporary** database and temp folders — real data is never touched.
 These are offline tests: they mock the GLM HTTP calls. The **live API smoke
 test and a browser-level walkthrough are still pending** (tracked in

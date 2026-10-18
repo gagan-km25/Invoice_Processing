@@ -74,7 +74,8 @@ Sprint E1's committed state it is marked "(met, E1)".
   DB never migrated without authorization.
 - **Priority:** Must. **Dependencies:** none.
 - **Evidence:** `tests/unit/test_migration.py` (TC-MIG-01..07, 09); verified
-  copy rehearsal (TEST_PLAN R-E0-4); live DB never migrated.
+  copy rehearsal (TEST_PLAN R-E0-4); live DB migrated to v3 at its
+  2026-10-18 boot (integrity ok; record in TEST_PLAN and K-7).
 
 **US-E0-3 (Done, committed `daeb9c2`) — Environment-based configuration**
 - **User story:** As the system, I want AI-provider settings read from the
@@ -183,9 +184,9 @@ Sprint E1's committed state it is marked "(met, E1)".
 - **Priority:** Must. **Dependencies:** US-E1-1.
 - **Evidence:** TC-RECV-01..04.
 
-### 2.3 Sprint E2 — GLM extraction, images, response validation (all Done — tested, uncommitted; commit pending authorization)
+### 2.3 Sprint E2 — GLM extraction, images, response validation (all Done — implemented and committed `c5d6bee`; live GLM smoke pending authorization)
 
-**US-E2-1 (Done — tested, uncommitted) — GLM extraction for text PDFs**
+**US-E2-1 (Done — implemented and committed `c5d6bee`) — GLM extraction for text PDFs**
 - **User story:** As a user, I want configured GLM extraction for
   text-layer PDF invoices, so that fields are extracted without the local
   rules parser.
@@ -200,7 +201,7 @@ Sprint E1's committed state it is marked "(met, E1)".
 - **Evidence:** TC-GLM-TEXT-01 (mocked HTTP); fallback test
   TC-FALLBACK-01; R-E2-4.
 
-**US-E2-2 (Done — tested, uncommitted) — Strict AI-response validation**
+**US-E2-2 (Done — implemented and committed `c5d6bee`) — Strict AI-response validation**
 - **User story:** As the system, I want every AI response validated
   against the expected schema before use, so that malformed or hostile
   responses never corrupt invoice data.
@@ -215,7 +216,7 @@ Sprint E1's committed state it is marked "(met, E1)".
 - **Evidence:** `tests/unit/test_glm_response.py` (TC-RESP unit set);
   TC-RAW-01 (truncation); malformed/re-ask integration test.
 
-**US-E2-3 (Done — tested, uncommitted) — JPG/JPEG/PNG uploads and vision
+**US-E2-3 (Done — implemented and committed `c5d6bee`) — JPG/JPEG/PNG uploads and vision
 extraction**
 - **User story:** As a user, I want image invoices (JPG/JPEG/PNG) and
   scanned PDFs extracted via the vision model, so that I am not limited to
@@ -242,7 +243,7 @@ extraction**
 - **Evidence:** none yet — TEST_PLAN R-E2-3 records NOT PERFORMED; no
   live call has been made.
 
-### 2.4 Sprint E3 — business validation, duplicates, extended fields (Planned — not started)
+### 2.4 Sprint E3 — business validation, duplicates, extended fields (Done — implemented, accepted and committed `795e5bf`)
 
 **US-E3-1 (Done, accepted 2026-10-14) — Business validation with verdicts**
 - **User story:** As a user, I want every extracted invoice automatically
@@ -299,7 +300,7 @@ Extended invoice fields (§6)**
   verified 2026-10-13 — XF-06/I05 green, full suite 357 passed.
 - **Priority:** Must. **Dependencies:** US-E2-1/2, US-E0-2 (columns exist).
 
-### 2.5 Sprint E4 — approval workflow (Planned — not started)
+### 2.5 Sprint E4 — approval workflow (Done — implemented, accepted and committed `795e5bf`)
 
 **US-E4-1 (Accepted 2026-10-14) — Approval routing**
 - **User story:** As the system, I want invoices routed by amount
@@ -342,7 +343,7 @@ Extended invoice fields (§6)**
   columns + audit in ONE transaction.
 - **Priority:** Must. **Dependencies:** US-E4-1/2, US-E0-4.
 
-### 2.6 Sprint E5 — views and lifecycle polish (Planned — not started)
+### 2.6 Sprint E5 — views and lifecycle polish (Done — implemented, accepted and committed `795e5bf`)
 
 **US-E5-1 (Done, implemented 2026-10-14) — Invoice list with status filter and ID column**
 - **User story:** As a user, I want the invoice list to show all invoices
@@ -381,7 +382,7 @@ Extended invoice fields (§6)**
   parity + copy-rehearsal source-preservation evidence (TC-MIG-V3-00..06).
 - **Priority:** Must. **Dependencies:** US-E1-1, US-E3-*, US-E4-*.
 
-### 2.7 Sprint E6 — verification, documentation, demonstration (Planned — not started)
+### 2.7 Sprint E6 — verification, documentation, demonstration (In progress — offline documentation, parser enhancements and the reprocess fix are done and committed; live verification pending authorization)
 
 **US-E6-1 (Partial — inventory recorded; final re-record pending) — Full regression and negative-test inventory**
 - **User story:** As a reviewer, I want the complete suite rerun and the
@@ -398,7 +399,8 @@ Extended invoice fields (§6)**
 - **Status/evidence (partial, 2026-10-14):** the §16 negative-case and
   integration-flow coverage maps are recorded in TEST_PLAN (each of the
   11 negative areas maps to named, passing tests); the latest full-suite
-  record is 414 passed / 0 failed (E5). Remaining: the final E6-close
+  record is 478 passed / 0 failed (final offline verification, 2026-10-15,
+  TEST_PLAN). Remaining: the final E6-close
   re-record of the suite.
 
 **US-E6-2 (Partial — final sweep pending) — Documentation finalisation**
@@ -431,7 +433,7 @@ Extended invoice fields (§6)**
   consolidation), and per-sprint code-review records. Remaining: the
   final E6 review entry at close.
 
-**US-E6-4 (Planned — script drafted; run pending authorisation) — End-to-end demonstration and walkthrough**
+**US-E6-4 (In progress — script drafted in docs/16; run pending authorisation) — End-to-end demonstration and walkthrough**
 - **User story:** As a reviewer, I want a recorded functional
   demonstration (upload → processing → review → submit → approve; reject;
   duplicate; live smoke), the technical walkthrough (architecture, DB
@@ -524,14 +526,15 @@ logging**
 | 14 | Audit history | US-E0-4/US-E1-4/US-E5-2 | **Done (E5)** — events recorded since E0/E1; audit-timeline UI delivered (TC-DETAIL-01) |
 | 15 | List/detail/filtering | US-E5-1/2 | **Done (E5)** — TC-LIST-01..05, TC-DETAIL-01..04, TC-RAW-02 UI half |
 | 16 | Safe error handling & logging | US-E1-5 | **PASS** (TC-ERR/LOG/KEY/RAW) |
-| 17 | Automated tests | all sprints | **PASS** — 448 passed / 0 failed (latest recorded, E6 close pending; progression 414 → 421 → 428 → 447 → 448 recorded in TEST_PLAN) |
-| 18 | SDLC documentation | US-E0-5/US-E6-2 | **Partial** — all §19 documents exist and are current through E5; final accuracy sweep + §16/§24 mappings recorded this revision |
-| 19 | Claude Code usage documented | US-E6-3 | **Partial** — genuine entries through E2; E3–E5 events identified this revision, being appended |
-| 20 | Git practices | US-E0-1 + sprint discipline | **Done (AC-20)** — chronological per-sprint commits executed with explicit-path staging (E0 `daeb9c2`, E1 `b4bbee9`, E2 `c5d6bee`, E3–E5 `795e5bf`, E6 docs `c197e11`, parser fix `2e9b85a`); no secrets committed |
-| 21 | End-to-end demonstration | US-E6-4 | **Not verified** — demo script drafted (docs/16); run requires app-launch + live-smoke authorisation |
+| 17 | Automated tests | all sprints | **PASS** — 478 passed / 0 failed (final offline verification, 2026-10-15, exit 0; progression 414 → 421 → 428 → 447 → 448 → 473 → 474 → 478 recorded in TEST_PLAN, incl. the restored TC-S2-N* suite, the reprocess role-visibility regression and the SCS regressions TC-E6-F14..F17); user-reported run: **482 passed / 0 failed** (adds the 4 uncommitted SCS tests) |
+| 18 | SDLC documentation | US-E0-5/US-E6-2 | **Done** — all 19 documents exist and are current through E6 close; final accuracy sweep completed 2026-10-18; §16 coverage map and §24 reconciliation recorded |
+| 19 | Claude Code usage documented | US-E6-3 | **Done** — genuine entries through E6 close: implementation bullets E0–E5+E6, debugging D-1..D-15, refactorings (E5 lifecycle rewire, E3 repository seam, E4 write consolidation), per-sprint code reviews, prompt-log rebuild (207 verbatim entries); E6 entry complete, incl. the final 478 verification |
+| 20 | Git practices | US-E0-1 + sprint discipline | **Done (AC-20)** — chronological per-sprint commits executed with explicit-path staging (E0 `daeb9c2`, E1 `b4bbee9`, E2 `c5d6bee`, E3–E5 `795e5bf`, E6 docs `c197e11`, parser fix `2e9b85a`, ISO/INR `b1cce06`, docs close `f2cf019`, reprocess fix `2b67d31`); no secrets committed |
+| 21 | End-to-end demonstration | US-E6-4 | **Partial (user-confirmed manual walkthrough)** — the user completed the browser walkthrough (invoice details, duplicates, approval/routing, rejection, audit history, history filtering, search, upload-date sorting, role checks) on the isolated demo instance; the recorded §23 demonstration run and live GLM smoke remain pending authorisation |
 
 **Known gaps (remaining, all authorisation-gated):** AC-2/5 live GLM smoke;
-AC-21 demonstration run. No offline criterion is pending.
+AC-21 demonstration run. The live-DB v3 migration completed
+2026-10-18 (recorded in TEST_PLAN; fresh post-migration backup taken). No offline criterion is pending.
 
 ---
 

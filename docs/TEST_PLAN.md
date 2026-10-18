@@ -75,8 +75,10 @@ nothing is pre-recorded for future sprints.
 - **E2 live smoke (manual, pending user key):** one real text PDF and one
   real image through the configured GLM path; model names confirmed against
   the account; results recorded here.
-- **E6:** full regression, TC-MIG-08 final rehearsal record, TC-DOC-CHECK,
-  end-to-end demo dry run (manual, recorded).
+- **E6:** full regression, TC-DOC-CHECK, end-to-end demo dry run (manual,
+  recorded); the TC-MIG-08 rehearsal expectation is superseded by the
+  actual live-migration record added 2026-10-18 (below); the live GLM
+  smoke remains pending (optional under the assignment).
 
 Sprint E5 is now executed: all-status list with exact-status filter,
 search composition, ID + Created columns (TC-LIST-01..05,
@@ -100,7 +102,7 @@ currency dataset, split-GST summation, F1 guard) — all on the current tree:
   test_normalize.py amount/token matrix; comma-group disambiguation rule;
   CGST/SGST/IGST summary handling; item-header vendor guard extension).
 - F1 ambiguous-currency guard: **447 passed, 0 failed** (TC-E6-C06..C08).
-- Latest recorded run: **448 passed, 0 failed** — adds TC-E6-C09
+- Last E6 parser close run: **448 passed, 0 failed** — adds TC-E6-C09
   (parse()-seam line-amount guard) and test_currencies.py (ISO 4217 dataset
   integrity). New offline artefacts: app/services/parser/currencies.py
   (ISO 4217 snapshot, 164 active codes with minor-unit exponents including
@@ -110,6 +112,40 @@ currency dataset, split-GST summation, F1 guard) — all on the current tree:
   parse_amount, split CGST/SGST/IGST tax summation with combined-row
   precedence, and the F1 guard (minor-unit normalization only on a
   confirmed currency — ambiguous values never requantize).
+
+Post-448 close-out runs (same tree): test_normalize coverage restore
+(+25 TC-S2-N* restored) → **473 passed, 0 failed**; reprocess-button
+role-visibility regression (TC-E6-A01/A02, F-template fix) → **474 passed,
+0 failed**. Parser directory standalone: 110 passed (includes the
+47 normalize items).
+
+Final offline verification (2026-10-15, branch `enhancement/assignment`):
+`./venv/Scripts/python.exe -m pytest -q` → **478 passed, 0 failed**, exit 0 —
+run on the finished tree after the reprocess role-visibility fix; working
+tree unchanged before/after the run (verified). Live GLM smoke, browser verification and the §23 recorded demonstration remain pending (optional); the live DB v3 migration completed 2026-10-18 — see the migration record below.
+
+Additional close-out regressions (same tree): SCS-INV-2614 real-layout
+regressions TC-E6-F14..F17 → **482 passed, 0 failed** (user-reported run;
+no command transcript recorded in the repository — distinguished from the
+recorded 478 execution above). The four SCS regression tests remain
+uncommitted in `tests/unit/parser/test_fields.py`; `fields.py` carries a
+further +18 uncommitted lines (F1 guard, Tax-ID skip, items-row vendor
+guard) from the same approved fix set.
+
+Live database schema v3 migration record (2026-10-18): the live
+`data/invoices.db` was found at schema v3 (PRAGMA user_version = 3)
+after a boot on 2026-10-18; the v2→v3 tightening migration ran at
+that boot. Read-only count-only verification (no invoice content
+accessed): integrity_check ok; 28 invoices present (11 pre-migration
+records + 17 newer); all 11 legacy records carry non-empty
+legacy_status and exactly 11 record_migrated audit events; status
+distribution 15 completed / 9 approved / 3 rejected / 1 failed with no
+`extracted`/`saved` stragglers. Disclosure: no fresh pre-migration
+backup was found — the only prior snapshot was the 2026-10-12 v2
+backup (11 invoices). A fresh post-migration backup was taken
+2026-10-18: `data/invoices-v3-backup-20261018-205258.db` (copy of the
+source; user_version = 3, integrity_check ok, 28 invoices; source
+unmodified).
 
 ### Assignment §16 coverage map (E6 reconciliation, recorded 2026-10-14)
 

@@ -154,9 +154,19 @@ docs/SPRINT_PLAN.md + docs/ARCHITECTURE.md.
   CGST/SGST/IGST tax summation with combined-row precedence, and the F1
   ambiguous-currency guard with regression tests TC-E6-C06..C09. Commit
   series executed per user authorization: 795e5bf (E3–E5), c197e11 (E6
-  documentation), 2e9b85a (parser fix). Recorded: parser suite 85 passed;
-  full suite 448 passed / 0 failed. Live GLM smoke, browser-level
-  verification and the §23 demonstration remain pending authorization.
+  documentation), 2e9b85a (parser fix), b1cce06 (ISO 4217 + general INR
+  fixes), f2cf019 (E6 docs close), 2b67d31 (reprocess visibility fix).
+  Recorded progression: 414 → 421 → 428 →
+  447 → 448, then +25 restored Sprint 2 normalize tests and the reprocess
+  visibility regression → **473 passed**, parser suite **110 passed**, and
+  after the reprocess template fix **474 passed / 0 failed**, then the
+  final offline verification **478 passed / 0 failed** (2026-10-15) —
+  recorded in TEST_PLAN. Live GLM
+  smoke, browser-level verification and the §23 demonstration remain
+  pending authorization. Also: docs/05-prompt-log.md was rebuilt (per team
+  feedback) as a chronological verbatim prompt log with UTC timestamps from
+  the retained session transcripts (207 prompts recovered; v1 planning
+  prompts P-01–P-14 marked unavailable).
 - **Sprint E5 implementation (2026-10-14, genuine).** Claude Code
   implemented the all-status list with status filter and ID/Created
   columns, the audit-timeline and escaped collapsed raw-response panels,
@@ -360,42 +370,6 @@ only if they occur.
 - **Testing:** TC-E3-XF-06 and TC-E3-XF-I05 went red → green; full suite
   357 passed at E3 close.
 
-### D-14 — CPS-INV-5099 extracted zero line items; currency/vendor mis-extracted (E6 close, 2026-10-14)
-
-- **Problem:** During the authorized isolated browser session, three
-  uploaded invoices (CPS-INV-5099, BE-INV-2045, MOS-INV-3088) all showed
-  vendor `Description`, no currency, and `validation_failed`
-  (E_MISSING_CURRENCY); CPS-INV-5099 additionally had zero line items
-  despite five item rows in the PDF.
-- **Investigation:** Read-only dump of the isolated session database plus a
-  read-only pdfplumber extraction of the stored upload. Currency: the local
-  parser derives currency only from amount-attached glyphs + GST inference
-  (fields.py) and never reads a `Currency: INR` label; the CPS amounts are
-  plain numbers, so currency went `missing` (validation then correctly
-  raised E_MISSING_CURRENCY). Vendor: `extract_vendor_block` accepted the
-  first table's leading cell `Description` because the non-vendor guard did
-  not know the item-table header keywords. Line items: pdfplumber's table
-  HAS the header row (`Description/Qty/Unit Price/Amount`), but the item
-  rows are name-first four-column `[description, qty, unit price, amount]`
-  with no line number — `find_item_table` matched the header, yet
-  `extract_line_items` required integer-leading 5-cell rows and dropped
-  every row (E-15).
-- **Root cause:** Three local-parser gaps for this layout family, all in
-  extraction (the validation engine was faithful at every step).
-- **Solution:** (1) explicit currency label rule with deterministic
-  precedence (label > symbol > GST inference; garbled labels → ambiguous,
-  never guessed); (2) item-table header keywords added to the non-vendor
-  guard; (3) a name-first four-column row branch in the header path plus a
-  headerless-fallback extractor requiring ≥2 item rows (never fabricating).
-- **Testing:** TC-E6-F01..F07, TC-E6-L01..L06, TC-MIG unchanged; real-PDF
-  re-parse of the stored upload produced currency `found INR`, vendor
-  `CloudPeak Systems` (ambiguous), 5 line items with exact values, verdict
-  `passed` (line-sum rule now satisfied). Full suite 421 → 428 passed.
-  Currency/vendor fixes committed as 2e9b85a; the line-item fix is
-  implemented and tested but **uncommitted pending approval**. The isolated
-  session's stored rows were intentionally left as evidence (reprocessing
-  through the UI applies the fix).
-
 ### D-12 — E5 list query mixed placeholder order (Sprint E5, 2026-10-14)
 
 - **Problem:** `test_count_matches_listing` failed for the combined
@@ -470,3 +444,60 @@ the sprint plan):
   decision, not unilaterally; a stricter Error threshold for large
   discount-aware deviations was declined as out-of-scope without a new
   decision (docs/15 §5).
+
+
+### D-14 — CPS-INV-5099 extracted zero line items; currency/vendor mis-extracted (E6 close, 2026-10-14)
+
+- **Problem:** During the authorized isolated browser session, three
+  uploaded invoices (CPS-INV-5099, BE-INV-2045, MOS-INV-3088) all showed
+  vendor `Description`, no currency, and `validation_failed`
+  (E_MISSING_CURRENCY); CPS-INV-5099 additionally had zero line items
+  despite five item rows in the PDF.
+- **Investigation:** Read-only dump of the isolated session database plus a
+  read-only pdfplumber extraction of the stored upload. Currency: the local
+  parser derives currency only from amount-attached glyphs + GST inference
+  (fields.py) and never reads a `Currency: INR` label; the CPS amounts are
+  plain numbers, so currency went `missing` (validation then correctly
+  raised E_MISSING_CURRENCY). Vendor: `extract_vendor_block` accepted the
+  first table's leading cell `Description` because the non-vendor guard did
+  not know the item-table header keywords. Line items: pdfplumber's table
+  HAS the header row (`Description/Qty/Unit Price/Amount`), but the item
+  rows are name-first four-column `[description, qty, unit price, amount]`
+  with no line number — `find_item_table` matched the header, yet
+  `extract_line_items` required integer-leading 5-cell rows and dropped
+  every row (E-15).
+- **Root cause:** Three local-parser gaps for this layout family, all in
+  extraction (the validation engine was faithful at every step).
+- **Solution:** (1) explicit currency label rule with deterministic
+  precedence (label > symbol > GST inference; garbled labels → ambiguous,
+  never guessed); (2) item-table header keywords added to the non-vendor
+  guard; (3) a name-first four-column row branch in the header path plus a
+  headerless-fallback extractor requiring ≥2 item rows (never fabricating).
+- **Testing:** TC-E6-F01..F07, TC-E6-L01..L06, TC-MIG unchanged; real-PDF
+  re-parse of the stored upload produced currency `found INR`, vendor
+  `CloudPeak Systems` (ambiguous), 5 line items with exact values, verdict
+  `passed` (line-sum rule now satisfied). Full suite 421 → 428 passed.
+  Currency/vendor fixes committed as 2e9b85a; the line-item fix is
+  implemented, tested and committed as part of 795e5bf. The isolated
+  session's stored rows were intentionally left as evidence (reprocessing
+  through the UI applies the fix).
+
+
+### D-15 — E6 test additions overwrote the Sprint 2 normalize suite (E6 close, 2026-10-15)
+
+- **Problem:** The general-INR regression tests were written to
+  `tests/unit/parser/test_normalize.py` with a Write that **replaced** the
+  existing file — 25 Sprint 2 tests (TC-S2-N01…N27: dates, amounts,
+  resolve_currency, invoice numbers, clean) were lost. The full suite still
+  passed (448/0) because the lost tests covered still-working code.
+- **Investigation:** The E6 pre-commit review enumerated 25 test functions
+  at HEAD versus 4 in the working tree (`git show
+  HEAD:tests/unit/parser/test_normalize.py`), and after the merge verified
+  the restored test segment was byte-identical to HEAD (31/31 assert lines).
+- **Root cause:** Wrote a new file without checking whether the path
+  already existed.
+- **Solution:** Merged — the HEAD file restored verbatim, the E6 tests
+  appended, and the pytest parametrize decorator re-attached.
+- **Testing:** `pytest tests/unit/parser/test_normalize.py -q` → 47 passed
+  (25 restored + 4 E6, one parametrized ×9); parser directory 110; full
+  suite 473, later 474 with the reprocess visibility regression.
