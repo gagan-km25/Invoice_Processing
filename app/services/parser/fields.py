@@ -87,6 +87,18 @@ def find_summary_amount(lines: list[str], label_list):
     return None, None, None
 
 
+def _row_looks_like_items(row) -> bool:
+    """A table row that carries a description plus two or more numeric or
+    amount cells is a line-item row, not a vendor block (verified:
+    SCS-INV-2614 — headerless item rows like 'Cloud hosting plan | 10 |
+    n3,500.00 | n35,000.00' were accepted as the vendor)."""
+    cells = [clean(c) for c in row if clean(c)]
+    if len(cells) < 3 or parse_amount(cells[0]) is not None:
+        return False
+    amount_like = sum(1 for c in cells[1:] if parse_amount(c) is not None)
+    return amount_like >= 2
+
+
 def _looks_like_non_vendor(first_line_low: str) -> bool:
     """Header/label cells are not vendor blocks (guards against layouts where
     pdfplumber builds tables from title, labels, or bill-to rows)."""
@@ -118,6 +130,8 @@ def extract_vendor_block(tables):
     for table in tables or []:
         if not table or not table[0] or not table[0][0]:
             continue
+        if _row_looks_like_items(table[0]):
+            continue  # items table: leading cell is a line-item description
         cell_lines = text_lines(str(table[0][0]))
         if not cell_lines:
             continue
@@ -177,6 +191,10 @@ def _collect_tax_matches(lines: list[str]) -> list[tuple[str, str, str, Decimal]
     matches: list[tuple[str, str, str, Decimal]] = []
     for line in lines:
         low = line.lower()
+        if _match_label(low, labels.VENDOR_TAX_ID_LABELS):
+            # vendor tax-identifier line ('Tax ID: …', 'GSTIN: …') — never a
+            # tax amount (verified: SCS-INV-2614 tax became the GSTIN digits)
+            continue
         label = _match_label(low, labels.TAX_LABELS)
         if label is None:
             continue

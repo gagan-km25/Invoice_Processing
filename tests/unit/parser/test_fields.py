@@ -4,7 +4,9 @@ the parser contract is text-in/draft-out, no PDFs needed.
 """
 from decimal import Decimal
 
+from app.services.parser import parse as parse_draft
 from app.services.parser.fields import build_fields
+from app.services.validation import validate
 
 SAMPLE_TABLE = [
     [
@@ -458,3 +460,84 @@ Total ¥12,345.67"""
     assert line["amount"] == Decimal("12345.67")
     assert line["unit_price"].as_tuple().exponent == -2
     assert line["amount"].as_tuple().exponent == -2
+
+
+# --------------------------------- Sprint E6 close: SCS-INV-2614 regressions
+# Real invoice layout (authorized demo session): items table WITHOUT a
+# header row, vendor GSTIN on a "Tax ID:" line, plain-number amounts with
+# the 'n' mojibake glyph, explicit "Currency: INR" label.
+
+SCS_TEXT = """Saffron Cloud Services
+Mysuru, Karnataka, India
+INVOICE
+Invoice Number: SCS-INV-2614 Invoice Date: 2026-10-14
+Due Date: 2026-11-13 Tax ID: 29FICSC2614A1Z5
+Currency: INR
+Cloud hosting plan 10 n3,500.00 n35,000.00
+Managed database 8 n4,800.00 n38,400.00
+Backup storage 20 n650.00 n13,000.00
+Support package 10 n1,200.00 n12,000.00
+Subtotal n98,400.00
+Discount n6,000.00
+GST (18%) n16,632.00
+Total n109,032.00
+Total Due: n109,032.00
+Discount is applied before tax.
+Fictional sample invoice generated for software testing only. Not a real invoice."""
+
+# pdfplumber's single table for this layout: headerless four-column item
+# rows plus four-cell summary rows (labels in the third cell).
+SCS_TABLES = [[
+    ["Cloud hosting plan", "10", "n3,500.00", "n35,000.00"],
+    ["Managed database", "8", "n4,800.00", "n38,400.00"],
+    ["Backup storage", "20", "n650.00", "n13,000.00"],
+    ["Support package", "10", "n1,200.00", "n12,000.00"],
+    ["", "", "Subtotal", "n98,400.00"],
+    ["", "", "Discount", "n6,000.00"],
+    ["", "", "GST (18%)", "n16,632.00"],
+    ["", "", "Total", "n109,032.00"],
+]]
+
+
+def test_scs_tax_id_line_is_not_the_tax_amount():
+    """TC-E6-F14 — a 'Tax ID:' line must never feed the tax strategy: the
+    GSTIN digits (29261415) previously became the tax amount."""
+    fields = build_fields(SCS_TEXT, SCS_TABLES)
+    assert fields["tax"]["status"] == "found"
+    assert fields["tax"]["value"] == Decimal("16632.00")
+    assert fields["tax_rate"]["value"] == 18.0
+
+
+def test_scs_vendor_is_not_an_item_description():
+    """TC-E6-F15 — the items table's leading cell ('Cloud hosting plan')
+    must not become the vendor; the real vendor line is found via the
+    geometric fallback (ambiguous, per the honesty model)."""
+    fields = build_fields(SCS_TEXT, SCS_TABLES)
+    assert fields["vendor"]["status"] == "ambiguous"
+    assert fields["vendor"]["value"] == "Saffron Cloud Services"
+
+
+def test_scs_amounts_and_currency():
+    """TC-E6-F16 — INR label + mojibake amounts: currency found INR;
+    subtotal/discount/total exact."""
+    fields = build_fields(SCS_TEXT, SCS_TABLES)
+    assert fields["currency"]["status"] == "found"
+    assert fields["currency"]["value"] == "INR"
+    assert fields["subtotal"]["value"] == Decimal("98400.00")
+    assert fields["discount"]["value"] == Decimal("6000.00")
+    assert fields["total"]["value"] == Decimal("109032.00")
+
+
+def test_scs_items_extracted_via_parse():
+    """TC-E6-F17 — parse() returns all four SCS line items with exact
+    amounts and none of the summary rows."""
+    draft = parse_draft(SCS_TEXT, SCS_TABLES, page_count=1)
+    assert [(ln["description"], str(ln["amount"])) for ln in draft["lines"]] == [
+        ("Cloud hosting plan", "35000.00"),
+        ("Managed database", "38400.00"),
+        ("Backup storage", "13000.00"),
+        ("Support package", "12000.00"),
+    ]
+    v = validate(draft["fields"], draft["lines"])
+    assert v["verdict"] == "passed"
+    assert v["findings"] == []
