@@ -259,11 +259,16 @@ def save(invoice_id: int):
 @bp.get("/invoices")
 def history():
     """All invoices (Sprint E5, assignment §14), optional exact-status
-    filter and search, newest invoice date first, minimal paging."""
+    filter and search, minimal paging. `sort=created` orders by the
+    upload/creation timestamp (latest upload first); the default order is
+    newest invoice date first."""
     q = (request.args.get("q") or "").strip()
     status = request.args.get("status") or None
     if status not in current_app.config["INVOICE_STATUSES"]:
         status = None  # unknown filter values are ignored, not errors
+    sort = request.args.get("sort") or None
+    if sort != "created":
+        sort = None  # only the upload-date toggle is whitelisted
     try:
         page = max(1, int(request.args.get("page", 1)))
     except ValueError:
@@ -271,6 +276,7 @@ def history():
     conn = get_db()
     try:
         rows = list_invoices(conn, status=status, q=q or None,
+                             order="created_at" if sort == "created" else "invoice_date",
                              limit=PAGE_SIZE, offset=(page - 1) * PAGE_SIZE)
         total = count_invoices(conn, status=status, q=q or None)
     finally:
@@ -280,6 +286,7 @@ def history():
         rows=rows,
         q=q,
         status=status,
+        sort=sort,
         statuses=current_app.config["INVOICE_STATUSES"],
         total=total,
         page=page,

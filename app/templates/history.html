@@ -6,14 +6,20 @@
 
   <form method="get" action="{{ url_for('invoices.history') }}" class="search-form">
     <input type="text" name="q" value="{{ q }}" placeholder="Search invoice number or vendor…">
-    <select name="status" aria-label="Filter by status">
+    <select name="status" aria-label="Filter by status" onchange="this.form.submit()">
       <option value="">All statuses</option>
       {% for s in statuses %}
       <option value="{{ s }}" {% if s == status %}selected{% endif %}>{{ s }}</option>
       {% endfor %}
     </select>
+    {% if sort %}<input type="hidden" name="sort" value="{{ sort }}">{% endif %}
     <button type="submit">Apply</button>
-    {% if q or status %}<a href="{{ url_for('invoices.history') }}" class="button-link">Clear</a>{% endif %}
+    {% if sort == 'created' %}
+    <a href="{{ url_for('invoices.history', q=q or none, status=status or none) }}" class="button-link button-active">Sorted by upload date</a>
+    {% else %}
+    <a href="{{ url_for('invoices.history', q=q or none, status=status or none, sort='created') }}" class="button-link">Sorted by upload date</a>
+    {% endif %}
+    {% if q or status or sort %}<a href="{{ url_for('invoices.history') }}" class="button-link">Clear</a>{% endif %}
   </form>
 
   {% if rows %}
@@ -51,10 +57,10 @@
 
   <div class="pager">
     {% if page > 1 %}
-    <a href="{{ url_for('invoices.history', q=q or none, status=status or none, page=page - 1) }}">← Newer</a>
+    <a href="{{ url_for('invoices.history', q=q or none, status=status or none, sort=sort or none, page=page - 1) }}">← Newer</a>
     {% endif %}
     {% if page < pages %}
-    <a href="{{ url_for('invoices.history', q=q or none, status=status or none, page=page + 1) }}">Older →</a>
+    <a href="{{ url_for('invoices.history', q=q or none, status=status or none, sort=sort or none, page=page + 1) }}">Older →</a>
     {% endif %}
   </div>
 

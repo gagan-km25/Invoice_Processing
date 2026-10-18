@@ -228,3 +228,50 @@ def test_detail_panels_visible_to_both_roles(
     html = client.get("/invoices/1").data.decode()
     assert "Audit history" in html
     assert "Approval" in html and "routed to the manager approver" in html
+
+
+# ---------------------------------- Sprint E6: filter interaction regressions
+
+def test_status_filter_with_sort_and_pagination_preserved(app, client):
+    """TC-E6-V01 — the status filter combines with the upload-date sort, and
+    pagination links preserve both status and sort parameters across pages."""
+    from app.db import get_db
+
+    # seed 55 completed invoices: staggered created_at (page 1 = newest) and
+    # distinct invoice dates so the two sort keys produce different orders
+    with app.app_context():
+        conn = get_db()
+        for n in range(1, 56):
+            conn.execute(
+                "INSERT INTO invoices (file_hash, original_filename, "
+                "stored_filename, status, invoice_number, currency, "
+                "invoice_date, created_at) "
+                "VALUES (?, ?, ?, 'completed', ?, 'INR', ?, ?)",
+                (f"h{n:03}", f"f{n:03}.pdf", f"s{n:03}.pdf", f"F-{n:03}",
+                 f"2026-{(n % 12) + 1:02d}-{(n % 28) + 1:02d}",
+                 f"2026-01-01T{n:02d}:00:00"))
+        conn.commit()
+        conn.close()
+
+    # page 1: filtered to completed, sorted by upload date (newest first)
+    page = client.get("/invoices?status=completed&sort=created&page=1")
+    body = page.data.decode()
+    assert "F-055" in body and "F-001" not in body          # page 1 = newest 50
+    assert "status=completed" in body and "sort=created" in body  # pager preserves both
+
+    # page 2: the remaining 5, still filtered and sorted
+    page = client.get("/invoices?status=completed&sort=created&page=2")
+    body = page.data.decode()
+    assert "F-001" in body and "F-005" in body and "F-006" not in body
+    assert "status=completed&amp;sort=created" in body  # &amp;: escaped in href
+
+    # the filter form carries the active selection and preserves sort
+    assert 'value="completed" selected' in body
+    assert '<input type="hidden" name="sort" value="created">' in body
+
+def test_history_form_auto_submits_on_status_change(app, client):
+    """TC-E6-V02 — the status dropdown submits its form on change
+    (progressive enhancement); the Apply button remains the no-JS path."""
+    page = client.get("/invoices").data.decode()
+    assert 'onchange="this.form.submit()"' in page
+    assert "<button type=\"submit\">Apply</button>" in page

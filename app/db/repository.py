@@ -162,12 +162,18 @@ def list_invoices(
     *,
     status: str | None = None,
     q: str | None = None,
+    order: str = "invoice_date",
     limit: int = 50,
     offset: int = 0,
 ) -> list[sqlite3.Row]:
     """All invoices for the history/list page (Sprint E5, assignment §14):
-    newest invoice date first (id as tiebreak; undated rows last), optional
-    exact-status filter and search fragment, minimal pagination."""
+    descending by the chosen sort key with id as tiebreak (undated rows
+    last), optional exact-status filter and search fragment, minimal
+    pagination. `order` is whitelisted: 'invoice_date' (default) or
+    'created_at' (upload/creation timestamp); anything else falls back to
+    'invoice_date'."""
+    if order not in ("invoice_date", "created_at"):
+        order = "invoice_date"
     fragment, params = _search_filter(q)
     status_clause = ""
     if status:
@@ -176,7 +182,7 @@ def list_invoices(
         status_clause = " AND status = ?"
     sql = (
         f"SELECT * FROM invoices WHERE 1 = 1{status_clause}{fragment} "
-        "ORDER BY invoice_date DESC, id DESC LIMIT ? OFFSET ?"
+        f"ORDER BY {order} DESC, id DESC LIMIT ? OFFSET ?"
     )
     return conn.execute(sql, [*params, limit, offset]).fetchall()
 

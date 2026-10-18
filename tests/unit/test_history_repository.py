@@ -270,3 +270,40 @@ def test_delete_leaves_others_untouched(app):
             assert len(get_lines(conn, keep)) == 1
         finally:
             conn.close()
+
+
+# ------------------------------------- Sprint E6: upload-date sort toggle
+
+def test_created_order_toggle_lists_latest_upload_first(app):
+    """Sprint E6 — order='created_at' orders by the upload/creation
+    timestamp (latest upload first, oldest last, id tiebreak); the default
+    remains invoice-date ordering."""
+    a = _add(app, vendor="A", number="A-1", date="2026-03-01")
+    b = _add(app, vendor="B", number="B-1", date="2026-01-01")
+    c = _add(app, vendor="C", number="C-1", date="2026-02-01")
+    # distinct upload/creation timestamps: b newest, a oldest
+    with app.app_context():
+        conn = get_db()
+        try:
+            conn.execute("UPDATE invoices SET created_at = ? WHERE id = ?", ("2026-01-01T10:00:00", a))
+            conn.execute("UPDATE invoices SET created_at = ? WHERE id = ?", ("2026-03-01T10:00:00", b))
+            conn.execute("UPDATE invoices SET created_at = ? WHERE id = ?", ("2026-02-01T10:00:00", c))
+            conn.commit()
+            rows = list_invoices(conn, order="created_at")
+        finally:
+            conn.close()
+    assert [row["id"] for row in rows] == [b, c, a]  # newest upload first
+
+
+def test_created_order_invalid_value_falls_back(app):
+    """Sprint E6 — a bogus order value falls back to invoice-date ordering
+    (whitelisted keys only)."""
+    a = _add(app, vendor="A", number="A-1", date="2026-03-01")
+    b = _add(app, vendor="B", number="B-1", date="2026-01-01")
+    with app.app_context():
+        conn = get_db()
+        try:
+            rows = list_invoices(conn, order="; DROP TABLE invoices")
+        finally:
+            conn.close()
+    assert [row["id"] for row in rows] == [a, b]  # invoice_date DESC fallback
