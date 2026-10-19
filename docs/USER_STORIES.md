@@ -184,7 +184,7 @@ Sprint E1's committed state it is marked "(met, E1)".
 - **Priority:** Must. **Dependencies:** US-E1-1.
 - **Evidence:** TC-RECV-01..04.
 
-### 2.3 Sprint E2 — GLM extraction, images, response validation (all Done — implemented and committed `c5d6bee`; live GLM smoke pending authorization)
+### 2.3 Sprint E2 — GLM extraction, images, response validation (all Done — implemented and committed `c5d6bee`; live GLM smoke completed 2026-10-18)
 
 **US-E2-1 (Done — implemented and committed `c5d6bee`) — GLM extraction for text PDFs**
 - **User story:** As a user, I want configured GLM extraction for
@@ -232,7 +232,7 @@ extraction**
 - **Evidence:** TC-GLM-VISION-02, TC-GLM-SCAN-03, TC-FALLBACK-02/03, MIME
   assertions in tests/integration/test_glm_extraction.py.
 
-**US-E2-4 (Pending — blocked on user input) — Live API smoke test**
+**US-E2-4 (Done 2026-10-18) — Live API smoke test**
 - **User story:** As a developer, I want one real text PDF and one real
   image extracted through the configured GLM path, so that the integration
   is verified beyond mocks.
@@ -240,8 +240,10 @@ extraction**
   recorded in TEST_PLAN; (2) model names confirmed against the account;
   (3) no live call ever occurs in the automated suite.
 - **Priority:** Should. **Dependencies:** US-E2-1..3; user-supplied key.
-- **Evidence:** none yet — TEST_PLAN R-E2-3 records NOT PERFORMED; no
-  live call has been made.
+- **Evidence:** both smokes performed 2026-10-18 with the user's key on
+  synthetic inputs (text PDF `glm-4.6`; PNG `glm-4.5v`), isolated
+  temp storage, live DB byte-identical; results recorded in TEST_PLAN
+  (E2 live smoke). No live call occurs in the automated suite.
 
 ### 2.4 Sprint E3 — business validation, duplicates, extended fields (Done — implemented, accepted and committed `795e5bf`)
 
@@ -382,9 +384,9 @@ Extended invoice fields (§6)**
   parity + copy-rehearsal source-preservation evidence (TC-MIG-V3-00..06).
 - **Priority:** Must. **Dependencies:** US-E1-1, US-E3-*, US-E4-*.
 
-### 2.7 Sprint E6 — verification, documentation, demonstration (In progress — offline documentation, parser enhancements and the reprocess fix are done and committed; live verification pending authorization)
+### 2.7 Sprint E6 — verification, documentation, demonstration (In progress — offline work is done and committed; the live GLM smokes are completed; the recorded §23 demonstration remains pending authorization)
 
-**US-E6-1 (Partial — inventory recorded; final re-record pending) — Full regression and negative-test inventory**
+**US-E6-1 (Done — final suite recorded 2026-10-18) — Full regression and negative-test inventory**
 - **User story:** As a reviewer, I want the complete suite rerun and the
   §16 negative-test inventory (unsupported file, empty file, invalid
   invoice data, missing mandatory field, invalid GSTIN, wrong total,
@@ -400,10 +402,10 @@ Extended invoice fields (§6)**
   integration-flow coverage maps are recorded in TEST_PLAN (each of the
   11 negative areas maps to named, passing tests); the latest full-suite
   record is 478 passed / 0 failed (final offline verification, 2026-10-15,
-  TEST_PLAN). Remaining: the final E6-close
-  re-record of the suite.
+  TEST_PLAN). Final committed-tree run recorded 2026-10-18 (482 passed / 0 failed,
+  exit 0 — TEST_PLAN).
 
-**US-E6-2 (Partial — final sweep pending) — Documentation finalisation**
+**US-E6-2 (Done — final sweep completed 2026-10-18) — Documentation finalisation**
 - **User story:** As a reviewer, I want TEST_PLAN and KNOWN_ISSUES
   finalised with only recorded results, so that documentation claims stay
   auditable against executed evidence.
@@ -412,12 +414,14 @@ Extended invoice fields (§6)**
   KNOWN_ISSUES entries carry status and mitigation.
 - **Priority:** Must (assignment §19/§24).
 - **Dependencies:** US-E6-1; the sprint entries P-E-15..P-E-26.
-- **Status/evidence (partial, 2026-10-14):** the E6 final-accuracy
-  checklist is recorded in TEST_PLAN; README rewritten; REQUIREMENTS
-  reconciled (inventory + statuses); §16/§24 mappings recorded.
-  Remaining: executing and ticking off the checklist at E6 close.
+- **Status/evidence (done, 2026-10-18):** the E6 final-accuracy checklist
+  was executed and ticked in TEST_PLAN (README, REQUIREMENTS, USER_STORIES,
+  SPRINT_PLAN, ARCHITECTURE, TEST_PLAN, KNOWN_ISSUES, CLAUDE_USAGE, §20
+  structure all verified); README rewritten; REQUIREMENTS reconciled;
+  §16/§24 mappings recorded; migration and live-smoke records added.
+  Remaining: none.
 
-**US-E6-3 (Partial — E3–E5 entries recorded; final review pending) — CLAUDE_USAGE.md completion**
+**US-E6-3 (Done — E0–E6 entries complete) — CLAUDE_USAGE.md completion**
 - **User story:** As a reviewer, I want CLAUDE_USAGE.md completed with
   genuine evidence only (implementation, debugging, review cycles as they
   actually occurred), so that the Claude Code record remains trustworthy.
@@ -426,12 +430,13 @@ Extended invoice fields (§6)**
   refactoring, code review); (2) no fabricated events.
 - **Priority:** Must (assignment §21).
 - **Dependencies:** the sprint interactions it records (P-E-15..P-E-26
-  exist; later entries pending).
-- **Status/evidence (partial, 2026-10-14):** genuine entries through
-  Sprint E5 — implementation bullets E0–E5, debugging D-1..D-13,
-  refactoring (E5 lifecycle rewire, E3 repository seam, E4 write
-  consolidation), and per-sprint code-review records. Remaining: the
-  final E6 review entry at close.
+  and the E6-close entries all exist).
+- **Status/evidence (done, 2026-10-18):** genuine entries through
+  Sprint E6 — implementation E0—E6, debugging D-1..D-15,
+  refactorings (E5 lifecycle rewire, E3 repository seam, E4 write
+  consolidation), per-sprint code-review records, prompt-log rebuild
+  (207 verbatim entries), and the E6 close entry incl. the 478
+  verification and finalization commits. Remaining: none.
 
 **US-E6-4 (In progress — script drafted in docs/16; run pending authorisation) — End-to-end demonstration and walkthrough**
 - **User story:** As a reviewer, I want a recorded functional
@@ -449,9 +454,9 @@ Extended invoice fields (§6)**
 - **Dependencies:** US-E2-4 (live smoke), US-E3-*, US-E4-*, US-E5-*.
 - **Status/evidence:** the three-part script is drafted in docs/16
   (9 [RECORD] steps; nothing claimed complete). The run requires
-  app-launch and live-smoke authorisation.
+  app-launch; the live smoke is complete (2026-10-18).
 
-**US-E6-5 (Partial — matrix reconciled; live/demo rows open) — Traceability matrix completion**
+**US-E6-5 (Partial — matrix reconciled; recorded-demo row open) — Traceability matrix completion**
 - **User story:** As a reviewer, I want all 21 acceptance criteria
   evidenced with no unchecked claims, so that the final acceptance claim
   is fully supported.
@@ -510,11 +515,11 @@ logging**
 
 | AC | Criterion (abridged) | Covered by | Status |
 |---|---|---|---|
-| 1 | Application enhanced | E0–E6 collectively | **Done (E0–E5 implemented, accepted and committed)** — remaining: E6 live verification only (GLM smoke, browser walkthrough, §23 demonstration) |
-| 2 | Required file types | US-E2-3 | **Done (offline-tested)** — live vision path awaits the recorded smoke (US-E2-4) |
+| 1 | Application enhanced | E0–E6 collectively | **Done (E0–E5 implemented, accepted and committed)** — live GLM smokes completed 2026-10-18; remaining: recorded demonstration only (browser walkthrough on the final tree, §23 run) |
+| 2 | Required file types | US-E2-3 | **Done** — offline-tested; live vision smoke 2026-10-18 (`glm-4.5v`, synthetic PNG; US-E2-4) |
 | 3 | Upload does not block | US-E1-2 | **PASS** (TC-ASYNC-01) |
 | 4 | Processing status available | US-E1-2 | **PASS** (TC-ASYNC-02) |
-| 5 | AI extraction structured | US-E2-1/2 | **Done (offline-tested)** — live smoke pending (US-E2-4) |
+| 5 | AI extraction structured | US-E2-1/2 | **Done** — offline-tested; live text+vision smokes completed 2026-10-18 (`glm-4.6`/`glm-4.5v`, US-E2-4) |
 | 6 | Invalid AI responses handled | US-E2-2 | **Done (offline-tested)** |
 | 7 | Extraction failures handled | US-E1-3 | **PASS** (TC-PIPE-FAIL-*) |
 | 8 | Business validation | US-E3-1 | **Done (E3, accepted)** — TC-E3-V/D/U-*, validation unit suite 33, real samples TC-S2-E01..E05; discount rule recorded in docs/15 |
@@ -526,14 +531,14 @@ logging**
 | 14 | Audit history | US-E0-4/US-E1-4/US-E5-2 | **Done (E5)** — events recorded since E0/E1; audit-timeline UI delivered (TC-DETAIL-01) |
 | 15 | List/detail/filtering | US-E5-1/2 | **Done (E5)** — TC-LIST-01..05, TC-DETAIL-01..04, TC-RAW-02 UI half |
 | 16 | Safe error handling & logging | US-E1-5 | **PASS** (TC-ERR/LOG/KEY/RAW) |
-| 17 | Automated tests | all sprints | **PASS** — 478 passed / 0 failed (final offline verification, 2026-10-15, exit 0; progression 414 → 421 → 428 → 447 → 448 → 473 → 474 → 478 recorded in TEST_PLAN, incl. the restored TC-S2-N* suite, the reprocess role-visibility regression and the SCS regressions TC-E6-F14..F17); user-reported run: **482 passed / 0 failed** (adds the 4 uncommitted SCS tests) |
+| 17 | Automated tests | all sprints | **PASS** — 478 passed / 0 failed (final offline verification, 2026-10-15, exit 0; progression 414 → 421 → 428 → 447 → 448 → 473 → 474 → 478 recorded in TEST_PLAN, incl. the restored TC-S2-N* suite, the reprocess role-visibility regression and the SCS regressions TC-E6-F14..F17); independently verified **482 passed / 0 failed / 0 skipped** (exit 0, 82.38 s, 2026-10-18, final committed tree incl. the 4 SCS tests — TEST_PLAN) |
 | 18 | SDLC documentation | US-E0-5/US-E6-2 | **Done** — all 19 documents exist and are current through E6 close; final accuracy sweep completed 2026-10-18; §16 coverage map and §24 reconciliation recorded |
 | 19 | Claude Code usage documented | US-E6-3 | **Done** — genuine entries through E6 close: implementation bullets E0–E5+E6, debugging D-1..D-15, refactorings (E5 lifecycle rewire, E3 repository seam, E4 write consolidation), per-sprint code reviews, prompt-log rebuild (207 verbatim entries); E6 entry complete, incl. the final 478 verification |
 | 20 | Git practices | US-E0-1 + sprint discipline | **Done (AC-20)** — chronological per-sprint commits executed with explicit-path staging (E0 `daeb9c2`, E1 `b4bbee9`, E2 `c5d6bee`, E3–E5 `795e5bf`, E6 docs `c197e11`, parser fix `2e9b85a`, ISO/INR `b1cce06`, docs close `f2cf019`, reprocess fix `2b67d31`); no secrets committed |
-| 21 | End-to-end demonstration | US-E6-4 | **Partial (user-confirmed manual walkthrough)** — the user completed the browser walkthrough (invoice details, duplicates, approval/routing, rejection, audit history, history filtering, search, upload-date sorting, role checks) on the isolated demo instance; the recorded §23 demonstration run and live GLM smoke remain pending authorisation |
+| 21 | End-to-end demonstration | US-E6-4 | **Partial (user-confirmed manual walkthrough)** — the user completed the browser walkthrough (invoice details, duplicates, approval/routing, rejection, audit history, history filtering, search, upload-date sorting, role checks) on the isolated demo instance; the recorded §23 demonstration run remains pending authorisation; live GLM smokes completed 2026-10-18 (US-E2-4) |
 
-**Known gaps (remaining, all authorisation-gated):** AC-2/5 live GLM smoke;
-AC-21 demonstration run. The live-DB v3 migration completed
+**Known gaps (remaining, all authorisation-gated):** AC-21 recorded demonstration run (optional). Live GLM smokes
+(text + vision) completed 2026-10-18 (US-E2-4). The live-DB v3 migration completed
 2026-10-18 (recorded in TEST_PLAN; fresh post-migration backup taken). No offline criterion is pending.
 
 ---

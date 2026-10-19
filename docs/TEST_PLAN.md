@@ -27,7 +27,7 @@ nothing is pre-recorded for future sprints.
 | R-E2-1 | 2026-10-13 | new E2 tests, iterative development runs (exact failure sequence recorded in the prompt log P-E-17): placeholder-count bug in `insert_invoice`, missing `Path` import, unmapped provider errors, currency normalization | Final E2 test files: `tests/unit/test_glm_client.py` (10), `tests/unit/test_glm_response.py` (10), `tests/integration/test_glm_extraction.py` (10) — **30 passed** after fixes |
 | R-E2-2 | 2026-10-13 | `pytest -q` (full suite) | **275 passed**, 0 failed (~26 s) — 240 pre-E2 + 35 new |
 | R-E2-4 | 2026-10-13 | code-review fixes **M-A/M-B/L-A/L-B/L-C** (+ H-1 vision-model threading found during M-B): focused `pytest tests/unit/test_glm_client.py tests/unit/test_glm_response.py tests/integration/test_glm_extraction.py -q` then `pytest -q` | **40 passed** focused (incl. new: max_tokens request-shape, non-RequestException not transient, rasterize failure → safe permanent, stale-raw cleared by local fallback, vision path calls `ZAI_VISION_MODEL`); full suite **280 passed**, 0 failed |
-| R-E2-3 | — | Live API smoke (text PDF + image, real key) | **NOT YET PERFORMED** — requires the user's Z.ai API key and explicit go-ahead; recorded here only when actually run |
+| R-E2-3 | 2026-10-18 | Live API smoke (text PDF + image, real key) | **PERFORMED (user-authorised)** — synthetic text PDF via `glm-4.6` and synthetic PNG via `glm-4.5v`; fields and line items verified against ground truth; live database byte-identical; see the E2 live smoke entry in §3 |
 
 ## 2. Sprint E0 test catalogue (executed)
 
@@ -70,15 +70,38 @@ nothing is pre-recorded for future sprints.
 | TC-LOG-01 | pipeline run leaves no invoice content in either log; events are structured | PASS |
 | TC-LOG-01b | `log_event` refuses non-allowlisted fields (structural guarantee) | PASS |
 
-## 3. Planned catalogue (NOT yet run — listed for traceability, no results claimed)
+## 3. Catalogue (listed for traceability; results recorded only where an item has actually been executed)
 
-- **E2 live smoke (manual, pending user key):** one real text PDF and one
-  real image through the configured GLM path; model names confirmed against
-  the account; results recorded here.
-- **E6:** full regression, TC-DOC-CHECK, end-to-end demo dry run (manual,
-  recorded); the TC-MIG-08 rehearsal expectation is superseded by the
-  actual live-migration record added 2026-10-18 (below); the live GLM
-  smoke remains pending (optional under the assignment).
+- **E2 live smoke (manual, user-authorised, DONE 2026-10-18):**
+  - Text: synthetic in-repo PDF `sample_invoices/invoice_003_multiitem.pdf`
+    (printed "fictional sample") via `glm-4.6` — all fields matched the PDF
+    ground truth (number MOS-88421, date, vendor, GSTIN, bill-to, currency
+    INR, subtotal 14045.00, discount 750.00, tax 1595.40 @ 12%, total
+    14890.40); 8/8 line items exact; 14045 — 750 + 1595.40 = 14890.40
+    balanced; status completed, 1 attempt; one warning (W_GSTIN_FORMAT on
+    the sample's deliberately fictional GSTIN); 1135-char raw response
+    retained. Three API calls were spent (two re-runs were for result
+    capture, not extraction faults).
+  - Vision: one synthetic PNG (generated for this test outside the repo,
+    fictional "Nimbus Office Supply Co." invoice) via `glm-4.5v` — fields
+    matched (number NIM-2099-888, date, currency USD, subtotal 62.00, tax
+    6.20, total 68.20); 2/2 line items exact; vendor matched as rendered
+    (all caps); validation passed with zero warnings.
+  - Method (both): the app's real upload route and worker in an isolated
+    temp-storage session with the real key; model+source recorded in the
+    extraction meta (`"model": "glm-4.6"/"glm-4.5v", "source": "glm"`);
+    live database sha256-verified byte-identical before and after.
+  - Limitations: the vision model was exercised on ONE clean rendered PNG
+    only — not a scanned PDF or poor-quality image. These are manual
+    live-API smoke tests: they are NOT automated tests and do not change
+    any automated-suite count.
+- **E6:** full regression, TC-DOC-CHECK — done; the end-to-end demo
+  dry run was executed offline 2026-10-18 (§23 items 1—8 plus extras
+  via the real routes on an isolated database; record in
+  docs/16-e6-demo-script.md); the TC-MIG-08 rehearsal expectation is
+  superseded by the actual live-migration record added 2026-10-18
+  (below); the live GLM smokes (text + vision) were completed
+  2026-10-18 (see the E2 live smoke entry above).
 
 Sprint E5 is now executed: all-status list with exact-status filter,
 search composition, ID + Created columns (TC-LIST-01..05,
@@ -122,7 +145,11 @@ role-visibility regression (TC-E6-A01/A02, F-template fix) → **474 passed,
 Final offline verification (2026-10-15, branch `enhancement/assignment`):
 `./venv/Scripts/python.exe -m pytest -q` → **478 passed, 0 failed**, exit 0 —
 run on the finished tree after the reprocess role-visibility fix; working
-tree unchanged before/after the run (verified). Live GLM smoke, browser verification and the §23 recorded demonstration remain pending (optional); the live DB v3 migration completed 2026-10-18 — see the migration record below.
+tree unchanged before/after the run (verified). The §23 recorded demonstration, including browser-level visual
+confirmation on the final tree, remains pending (optional); the live GLM
+smokes (text and vision) completed 2026-10-18 (see the E2 live smoke
+entry); the live DB v3 migration completed 2026-10-18 — see the
+migration record below.
 
 Additional close-out regressions (same tree): SCS-INV-2614 real-layout
 regressions TC-E6-F14..F17 → **482 passed, 0 failed** (user-reported run;
@@ -131,6 +158,14 @@ recorded 478 execution above). The four SCS regression tests remain
 uncommitted in `tests/unit/parser/test_fields.py`; `fields.py` carries a
 further +18 uncommitted lines (F1 guard, Tax-ID skip, items-row vendor
 guard) from the same approved fix set.
+
+Final committed-tree verification (2026-10-18, after commits
+`c3d75f3`, `917ad4d`, `3a83bd0`, `479b344`):
+`./venv/Scripts/python.exe -m pytest -q` → **482 passed, 0 failed,
+0 skipped**, exit 0, 82.38 s — the four SCS regression tests from
+the earlier user-reported run are now committed and independently
+reproduced on the final tree; the live database was sha256-verified
+unchanged by the run (isolated temp test databases only).
 
 Live database schema v3 migration record (2026-10-18): the live
 `data/invoices.db` was found at schema v3 (PRAGMA user_version = 3)
@@ -178,18 +213,18 @@ Integration flows — each maps to an executed flow test:
 
 ### E6 final-accuracy checklist (§19 documents + §20 structure)
 
-To be executed and ticked only against verified content (US-E6-2):
+Executed and ticked against verified content 2026-10-18 (US-E6-2):
 
-- [ ] **README.md** — states what the app is, how to run it (venv, `run.py`), test command, and where docs live; no stale sprint counts.
-- [ ] **docs/REQUIREMENTS.md** — functional/non-functional requirements, assumptions, dependencies, risks present (§19); check enhancement deltas referenced.
-- [ ] **docs/USER_STORIES.md** — story IDs + acceptance criteria + priority + dependencies for every story (§19); §24 matrix rows match recorded evidence (reconciled 2026-10-14; AC-2/5/21 stay authorisation-gated).
-- [ ] **docs/SPRINT_PLAN.md** — every sprint has goal, stories, tasks/outcome; E0–E5 statuses match acceptance records; E6 row updated when closed.
-- [ ] **docs/ARCHITECTURE.md** — existing vs proposed, components, data flow, background processing, AI integration (§19); state model reflects v3 (no `extracted`/`saved`); §6 route map matches implemented routes.
-- [ ] **docs/TEST_PLAN.md** — strategy, scenarios, negative cases, coverage (§19); every recorded number matches an executed run; §16 map present (this revision).
-- [ ] **docs/KNOWN_ISSUES.md** — every entry has status + mitigation; K-1..K-5 open-by-design with mitigations; K-6/K-7 resolved; K-9 incident retained with live-migration authorisation note.
-- [ ] **CLAUDE_USAGE.md** — §21 sections complete (exploration, planning, implementation, ≥2 debugging cases, ≥1 refactoring, code review); every entry traceable to recorded work; no fabricated events.
-- [ ] **Repository structure (§20)** — README.md, docs/ six named files, CLAUDE_USAGE.md all present at the documented paths (verified present this revision); additional docs (01–16) allowed as "useful additions".
-- [ ] **Numbers audit** — no document claims a test count or run that is not recorded in TEST_PLAN.md; the phrase "live smoke pending" only where true.
+- [x] **README.md** — states what the app is, how to run it (venv, `run.py`), test command, and where docs live; no stale sprint counts.
+- [x] **docs/REQUIREMENTS.md** — functional/non-functional requirements, assumptions, dependencies, risks present (§19); check enhancement deltas referenced.
+- [x] **docs/USER_STORIES.md** — story IDs + acceptance criteria + priority + dependencies for every story (§19); §24 matrix rows match recorded evidence (reconciled 2026-10-14, re-verified 2026-10-18; AC-21 recorded demo stays authorisation-gated; AC-2/5 live smokes done (US-E2-4)).
+- [x] **docs/SPRINT_PLAN.md** — every sprint has goal, stories, tasks/outcome; E0–E5 statuses match acceptance records; E6 row updated when closed.
+- [x] **docs/ARCHITECTURE.md** — existing vs proposed, components, data flow, background processing, AI integration (§19); state model reflects v3 (no `extracted`/`saved`); §6 route map matches implemented routes.
+- [x] **docs/TEST_PLAN.md** — strategy, scenarios, negative cases, coverage (§19); every recorded number matches an executed run; §16 map present (this revision).
+- [x] **docs/KNOWN_ISSUES.md** — every entry has status + mitigation; K-1..K-4 open-by-design with mitigations; K-5..K-7 and K-9 resolved; K-9 incident retained with live-migration authorisation note.
+- [x] **CLAUDE_USAGE.md** — §21 sections complete (exploration, planning, implementation, ≥2 debugging cases, ≥1 refactoring, code review); every entry traceable to recorded work; no fabricated events.
+- [x] **Repository structure (§20)** — README.md, docs/ six named files, CLAUDE_USAGE.md all present at the documented paths (verified present this revision); additional docs (01–16) allowed as "useful additions".
+- [x] **Numbers audit** — no document claims a test count or run that is not recorded in TEST_PLAN.md; the phrase "live smoke pending" only where true.
 
 Sprint E4 is now executed: submission routing at the ₹1,00,000 boundary
 and refusal rules (TC-APPR-SUB-01..04, `tests/unit/test_approvals.py`),
@@ -203,8 +238,7 @@ alone), queue role-filtering, session role switching
 changes; no new dependencies. Full suite at E4 completion: **397 passed,
 0 failed** (independently re-confirmed at the acceptance review).
 **Sprint E4 accepted 2026-10-14** (read-only acceptance review; see
-SPRINT_PLAN.md). Outstanding, tracked outside E4 criteria: live GLM smoke
-(E2 item, pending user key) and browser-level UI verification (E6).
+SPRINT_PLAN.md). Outstanding, tracked outside E4 criteria: the E2 live smoke item — completed 2026-10-18 (TEST_PLAN) — and browser-level UI verification (E6).
 
 Sprint E1 results are in §2b; Sprint E2 results in the run table above
 (R-E2-1/2) and the E2 catalogue now executed: TC-GLM-*, TC-RESP-01..12,

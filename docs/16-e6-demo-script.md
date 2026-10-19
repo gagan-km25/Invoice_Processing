@@ -1,8 +1,6 @@
 # E6 DEMONSTRATION SCRIPT (DRAFT) — assignment §23
 
-Status: **draft** — every step marked **[RECORD]** is to be executed and
-its actual result written here during the demonstration run. Nothing in
-this file claims a result that has not happened.
+Status: **functional rehearsal recorded 2026-10-18 (offline, isolated); browser-level walkthrough pending.** Every step marked **[RECORD]** carries its actual result below (see the demonstration-run record); nothing in this file claims a result that has not happened.
 
 Preconditions (each requires the stated authorisation):
 - App launch approved (browser-level verification + functional demo).
@@ -102,3 +100,34 @@ Walk CLAUDE_USAGE.md top-to-bottom with the transcript as evidence:
 
 Be prepared for a small live change request: the review-and-fix cycle
 recorded for M1/M2 (E1) demonstrates the workflow.
+
+---
+
+## Demonstration-run record (2026-10-18, offline functional rehearsal)
+
+Method: the application's real routes and worker were driven in-process
+(`create_app` + test client + `worker.run_pending()`) against an isolated
+temporary database with the real key absent (local parser; no external
+calls, no live-database access — live DB sha256-verified unchanged).
+Data: synthetic only (the printed-fictional `sample_invoices/
+invoice_003_multiitem.pdf` plus generated minimal PDFs/PNG). The in-app
+HTTP interactions below are executed checks; the browser presentation of
+this script and Parts 2–3 remain the presenter's live walkthrough.
+
+| Step | Actual result (2026-10-18) |
+|---|---|
+| 1 Upload [RECORD] | **Executed.** Text PDF: HTTP 302 — record visible on the redirected page immediately (processing continues in background). PNG without the key: typed permanent failure with the user-safe message "AI extraction is not configured — images ... require the GLM vision model" (graceful no-key path). Vision success with the key was demonstrated separately in the recorded 2026-10-18 live smokes. |
+| 2 Processing status [RECORD] | **Executed.** Record #3 showed `uploaded` before the worker ran and `completed` after; detail page HTTP 200; status endpoint `/invoices/<id>/status` HTTP 200. |
+| 3 Extraction [RECORD] | **Executed.** Detail showed all §6 header fields (number MOS-88421, date, vendor, GSTIN, bill-to, currency INR, subtotal 14045.00, discount 750.00, tax 1595.40, total 14890.40) and 8 persisted line items. Raw-response panel correctly absent for a local-parser run (retention is GLM-only; shown in the recorded smoke). |
+| 4 Validation [RECORD] | **Executed.** Broken-total file — `validation_failed` with finding `E_AMOUNT_PRIMARY_MISMATCH`; page showed the failed banner and findings list. Corrected file — `completed`. |
+| 5 Duplicate detection [RECORD] | **Executed.** Same file re-uploaded — classification `exact` with both matched records named (ids + vendor + number + date + total); Duplicate panel rendered; processing NOT blocked (status `completed`). |
+| 6 Approval routing [RECORD] | **Executed.** #1 (Rs 14,890.40) submitted — routed `manager` with the manager flash. #6 review & save raised the total to 150000.00 (duplicate-flagged save required explicit `confirm_duplicate` — the status-blind duplicate gate) and KEPT status `completed`; re-submit — routed `finance`. |
+| 7 Approve / Reject [RECORD] | **Executed.** Manager queue showed only the manager-routed record; approve — `approved`, `acted_by=approver:manager`. Second decision on the approved record refused with flash "only pending_approval invoices can be approved or rejected", status stayed `approved`. Finance queue showed only the finance-routed record; reject with typed reason — `rejected`, `acted_by=approver:finance`, `acted_at` set, reason stored and displayed. A finance attempt on the manager-routed record was refused 403 (zero-write). |
+| 8 Audit history [RECORD] | **Executed.** #6 audit events in order: uploaded, processing_started, extraction_completed, duplicate_detected, processing_completed, review_submitted, approval_assigned, invoice_rejected — panel with actors rendered. |
+| Extras [RECORD] | **Executed.** Reprocess as approver — 403 (vendor-only). Delete of a completed record without confirm — confirmation page. Delete while `uploaded` — blocked with the cannot-be-deleted flash. History status filter + search + upload-date sort composed (approved filter + `q=MOS` + `sort=created` — HTTP 200, only matching rows). |
+| Part 1 browser presentation | **Unexecuted here** — requires the approved app launch and a browser; the recorded checks above cover the same behaviour server-side. |
+| Part 2 / Part 3 walkthroughs | **Unexecuted** — speaking material for the presenter; doc/code anchors verified to exist (ARCHITECTURE §1–§9, CLAUDE_USAGE, docs/02, docs/07, docs/15). |
+
+Note: the earlier text in this file said "414 offline tests" (Part 2, item
+6); the current recorded figures are 478 (2026-10-15) and 482 (verified
+2026-10-18) — see TEST_PLAN.
