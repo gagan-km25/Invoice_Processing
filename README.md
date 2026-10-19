@@ -189,7 +189,7 @@ Original v1 documents (preserved unmodified): `docs/01-requirements-analysis.md`
 
 ## Important Notes
 
-- **Live verification pending:** the GLM integration is fully offline-tested
+- **Live verification:** the GLM integration is fully offline-tested
   (HTTP mocked) but has not yet been exercised against the real API; the UI
   has been verified at HTML/flow level, not in a browser session. Both are
   tracked for Sprint E6 (docs/TEST_PLAN.md §3).
