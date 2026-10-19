@@ -1,4 +1,4 @@
-# Invoice Extractor
+# Invoice Processing 
 
 A **local-only** invoice-processing web application: upload invoices (PDF,
 JPG, JPEG, PNG), have their details extracted (configured AI extraction for
